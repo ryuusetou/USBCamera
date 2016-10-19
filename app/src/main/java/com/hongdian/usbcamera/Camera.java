@@ -1,5 +1,7 @@
 package com.hongdian.usbcamera;
 
+import android.util.Log;
+
 import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.concurrent.locks.Lock;
@@ -9,6 +11,11 @@ import java.util.concurrent.locks.ReentrantLock;
  * Created by ryuus on 2016/9/8 0008.
  */
 public class Camera {
+
+    static {
+        System.loadLibrary("usbcamera");
+    }
+
     private Lock mUserLock;
 
     private LinkedList<CameraUser> mUser;
@@ -48,6 +55,9 @@ public class Camera {
 
     public void startStream(){
         nativeFD = openCamera();
+
+        if (nativeFD > 0)
+            peekFrame();
     }
 
     public void stopStream(){
@@ -58,6 +68,8 @@ public class Camera {
     }
 
     private void onNewFrame(ByteBuffer frame, long timeStampUs) {
+
+        Log.d("JAVAWORLD", "onNewFrame");
         mUserLock.lock();
         for (CameraUser user : mUser) {
             user.onFrameAvailable(this, frame, timeStampUs);

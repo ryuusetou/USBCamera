@@ -13,7 +13,7 @@ android {
 
         ndk {
             moduleName "usbcamera"
-            stl "stlport_static"
+            stl "gnustl_static"
             ldLibs "log"
         }
     }

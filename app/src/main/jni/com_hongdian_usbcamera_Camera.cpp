@@ -32,7 +32,7 @@ static const char *getCameraToken(JNIEnv *env, jobject &object) {
 	cameraToken = (jstring)env->GetObjectField(object,fid);
 	cameraTokenUTFChars = env->GetStringUTFChars(cameraToken, NULL);
 
-	LOGD("cameraTokenUTFChars:%s\n", cameraTokenUTFChars);	
+//	LOGD("cameraTokenUTFChars:%s\n", cameraTokenUTFChars);
 	return cameraTokenUTFChars;
 }
 
@@ -148,14 +148,18 @@ void Camera::peekFrame(){
 	jclass cameraClazz = mNestedEnv->FindClass("com/hongdian/usbcamera/Camera");
 	jmethodID onNewFrameMID = mNestedEnv->GetMethodID(cameraClazz, "onNewFrame", "(Ljava/nio/ByteBuffer;J)V");	
 
+	long long msec = 0;
+
 //	__android_log_print(ANDROID_LOG_DEBUG , "Camera peekFrame: %s", mCameraDevPath);
 	while (1) {
 		sleep(1);
 
-		LOGD("new frame readable!");
-
 		gettimeofday(&val, NULL);
-		mNestedEnv->CallVoidMethod(mJCamera, onNewFrameMID, frame, val.tv_sec * 1000 + val.tv_usec / 1000);		
+
+//		LOGD("new frame readable! %ld %ld", val.tv_sec, val.tv_usec);
+
+		msec = ((long long)(val.tv_sec) * 1000 + val.tv_usec / 1000);
+		mNestedEnv->CallVoidMethod(mJCamera, onNewFrameMID, frame, msec);
 	}
 }
 
