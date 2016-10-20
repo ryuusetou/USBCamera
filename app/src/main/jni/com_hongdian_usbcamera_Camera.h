@@ -25,6 +25,14 @@ JNIEXPORT jint JNICALL Java_com_hongdian_usbcamera_Camera_peekFrame
 
 /*
  * Class:     com_hongdian_usbcamera_Camera
+ * Method:    fillFrame
+ * Signature: (Lcom/hongdian/usbcamera/FrameContainer;)V
+ */
+JNIEXPORT void JNICALL Java_com_hongdian_usbcamera_Camera_fillFrame
+  (JNIEnv *, jobject, jobject);
+
+/*
+ * Class:     com_hongdian_usbcamera_Camera
  * Method:    closeCamera
  * Signature: ()V
  */

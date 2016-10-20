@@ -53,6 +53,7 @@ public class Camera {
         mUserLock.unlock();
     }
 
+
     public void startStream(){
         nativeFD = openCamera();
 
@@ -67,12 +68,15 @@ public class Camera {
         }
     }
 
-    private void onNewFrame(ByteBuffer frame, long timeStampUs) {
+    private void onNewFrame() {
+        FrameContainer container;
 
-        Log.d("JAVAWORLD", "onNewFrame");
         mUserLock.lock();
         for (CameraUser user : mUser) {
-            user.onFrameAvailable(this, frame, timeStampUs);
+            container = user.onGetFrameContainer();
+            if (container != null) {
+                fillFrame(container);
+            }
         }
         mUserLock.unlock();
     }
@@ -88,6 +92,8 @@ public class Camera {
     private native int openCamera();
 
     private native int peekFrame();
+
+    private native void fillFrame(FrameContainer container);
 
     private native void closeCamera();
 }
