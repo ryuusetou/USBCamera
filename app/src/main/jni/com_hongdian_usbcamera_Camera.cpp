@@ -165,6 +165,14 @@ void CameraHolder::removeCamera(string &key) {
 JNIEnv *Camera::nestedEnv;
 jclass Camera::cameraClass;
 
+jclass Camera::containerClass;
+jclass Camera::bytebufferClass;
+
+jmethodID Camera::arrayMethodID;
+jfieldID Camera::stampID;
+jfieldID Camera::sizeID;
+jfieldID Camera::targetID;
+
 void Camera::init(JNIEnv *env) {
 	nestedEnv = env;
 	
@@ -197,7 +205,9 @@ Camera::Camera(const char *devPath, jobject jCamera)
 	: mCameraDevPath(devPath)
 	, mJCamera(jCamera)
 	, mPeekRun(false)
-	, mFD(-1) {
+	, mFD(-1)
+	, mWidth(1280)
+	, mHeight(720) {
 
 	
 
@@ -397,7 +407,6 @@ void Camera::fillFrame(jobject container) {
 	signed char *ptr = (signed char *)nestedEnv->GetByteArrayElements(targetBuffer, NULL);
 	memcpy(ptr, mBufferArray[mCurBufInfo.index].start, length);
 	nestedEnv->ReleaseByteArrayElements(targetBuffer, ptr, 0);
-
 }
 
 /*
