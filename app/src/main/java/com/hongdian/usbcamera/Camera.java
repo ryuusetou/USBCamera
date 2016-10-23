@@ -55,6 +55,7 @@ public class Camera {
 
 
     public void startStream(){
+        Log.d("DEBUG", "now startStream");
         nativeFD = openCamera();
 
         if (nativeFD > 0)

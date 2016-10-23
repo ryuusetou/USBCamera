@@ -44,24 +44,24 @@ class Camera {
 	};
 	
 public:
-	Camera(const char *devPath, jobject jCamera);
+	Camera(const char *devPath);
 	~Camera();
 	
     int openCamera();
 	
-    void peekFrame();
+    void peekFrame(jobject jCamera);
 
-	void fillFrame(jobject frameContainer);
+	void fillFrame(JNIEnv * env, jobject container);
 	
 	void closeCamera();
 
 	int setWindowSize(int width, int height);
+	
+	void refreshEnv(JNIEnv *env);
 
-	static void init(JNIEnv *env);
-	static const char *getCameraDevicePath(jobject &);
+	static const char *getCameraDevicePath(JNIEnv *env, jobject camera);
 
 private:
-	jobject mJCamera;
 	const char *mCameraDevPath;
 	bool mPeekRun;
 	int mFD;
@@ -72,18 +72,18 @@ private:
 	struct v4l2_buffer mCurBufInfo;
 	struct buffer mBufferArray[BUFFER_NR];
 
-	static JNIEnv *nestedEnv;
+	JNIEnv *nestedEnv;
 	
-	static jclass cameraClass;
-	static jclass containerClass;
-	static jclass bytebufferClass;
+	jclass cameraClass;
+	jclass containerClass;
+	jclass bytebufferClass;
 
 	// method id of bytebuffer.array
-	static jmethodID arrayMethodID;
+	jmethodID arrayMethodID;
 	
-	static jfieldID stampID;
-	static jfieldID sizeID;
-	static jfieldID targetID;
+	jfieldID stampID;
+	jfieldID sizeID;
+	jfieldID targetID;
 };
 
 class CameraHolder {
@@ -162,18 +162,7 @@ void CameraHolder::removeCamera(string &key) {
 	pthread_mutex_unlock(&mCameraLock);
 }
 
-JNIEnv *Camera::nestedEnv;
-jclass Camera::cameraClass;
-
-jclass Camera::containerClass;
-jclass Camera::bytebufferClass;
-
-jmethodID Camera::arrayMethodID;
-jfieldID Camera::stampID;
-jfieldID Camera::sizeID;
-jfieldID Camera::targetID;
-
-void Camera::init(JNIEnv *env) {
+void Camera::refreshEnv(JNIEnv *env) {
 	nestedEnv = env;
 	
 	cameraClass = nestedEnv->FindClass("com/hongdian/usbcamera/Camera");
@@ -184,26 +173,21 @@ void Camera::init(JNIEnv *env) {
 
 	stampID = nestedEnv->GetFieldID(containerClass, "timeStamp", "J");
 	sizeID = nestedEnv->GetFieldID(containerClass, "size", "I");
-	targetID = nestedEnv->GetFieldID(containerClass, "size", "Ljava/nio/ByteBuffer;");
+	targetID = nestedEnv->GetFieldID(containerClass, "target", "Ljava/nio/ByteBuffer;");
 }
 
-const char *Camera::getCameraDevicePath(jobject &camera) {
-	if (nestedEnv == NULL || cameraClass == NULL) {
-		LOGD("Do Camera::init first\n");
-		return NULL;
-	}
-	
+const char *Camera::getCameraDevicePath(JNIEnv *env, jobject camera) {
 	jfieldID fid;
 	jstring devPath;
-	
-	fid = nestedEnv->GetFieldID(cameraClass, "mCameraDevPath", "Ljava/lang/String;");
-	devPath = (jstring)nestedEnv->GetObjectField(camera, fid);
-	return nestedEnv->GetStringUTFChars(devPath, NULL);
+
+	jclass cameraClass = env->FindClass("com/hongdian/usbcamera/Camera");	
+	fid = env->GetFieldID(cameraClass, "mCameraDevPath", "Ljava/lang/String;");
+	devPath = (jstring)env->GetObjectField(camera, fid);
+	return env->GetStringUTFChars(devPath, NULL);
 }
 
-Camera::Camera(const char *devPath, jobject jCamera) 
+Camera::Camera(const char *devPath) 
 	: mCameraDevPath(devPath)
-	, mJCamera(jCamera)
 	, mPeekRun(false)
 	, mFD(-1)
 	, mWidth(1280)
@@ -290,7 +274,7 @@ int Camera::openCamera() {
 		}
 	}
 
-	for (int i = 0; i < VIDIOC_QUERYBUF; ++i) {
+	for (int i = 0; i < BUFFER_NR; ++i) {
 		struct v4l2_buffer buf;
 
 		buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -298,7 +282,7 @@ int Camera::openCamera() {
 		buf.index = i;
 
 		if (0 > ioctl(mFD, VIDIOC_QBUF, &buf)) {
-			LOGD("VIDIOC_QBUF failed\n");
+			LOGD("VIDIOC_QBUF failed at:%d\n", i);
 			goto exit_tag;
 		}	
 	}
@@ -306,7 +290,9 @@ int Camera::openCamera() {
 	if (0 > ioctl(mFD, VIDIOC_STREAMON, &type)) {
 		LOGD("VIDIOC_STREAMON failed\n");
 		goto exit_tag;
-	}	
+	}
+
+	LOGD("camera open with fd=%d\n", mFD);
 
 	return mFD;
 	
@@ -316,7 +302,7 @@ exit_tag:
 	return mFD;
 }
 
-void Camera::peekFrame() {
+void Camera::peekFrame(jobject jCamera) {
 
 	if (mFD < 0) {
 		LOGD("camera not open, open first\n");
@@ -330,12 +316,14 @@ void Camera::peekFrame() {
 	jmethodID onNewFrameMID = \
 		nestedEnv->GetMethodID(cameraClass, "onNewFrame", "()V");	
 
+	mPeekRun = true;
 	while(mPeekRun) {
+		
 		FD_ZERO(&fds);
 		FD_SET(mFD, &fds);
 
-		tv.tv_sec = 0;
-		tv.tv_usec = 500 * 1000;
+		tv.tv_sec = 2;
+		tv.tv_usec = 0;
 
 		r = select(mFD + 1, &fds, NULL, NULL, &tv);
 		if (-1 == r) {
@@ -343,13 +331,13 @@ void Camera::peekFrame() {
 				continue;
 			else {
 			LOGD("frame-peek is error, \
-					hardware may not work normally.Reopening is reqired");
+hardware may not work normally.Reopening is reqired");
 			}
 		}
 
 		if (0 == r) {
 			LOGD("frame-peek is time-out, \
-					hardware may not work normally.Reopening is reqired\n");
+hardware may not work normally.Reopening is reqired\n");
 			goto exit_tag;
 		}
 
@@ -367,12 +355,12 @@ void Camera::peekFrame() {
 				/* fall through */
 			default:
 				LOGD("VIDIOC_DQBUF is err, \
-						hardware may not work normally.Reopening is reqired\n");
+hardware may not work normally.Reopening is reqired\n");
 			}
 		}
 
 		// get a frame now
-		nestedEnv->CallVoidMethod(mJCamera, onNewFrameMID);
+		nestedEnv->CallVoidMethod(jCamera, onNewFrameMID);
 		
 		// Retrieve
 		if (0 > ioctl(mFD, VIDIOC_QBUF, &mCurBufInfo)) {
@@ -387,36 +375,36 @@ exit_tag:
 	
 }
 
-void Camera::fillFrame(jobject container) {
-	jobject target;
+void Camera::fillFrame(JNIEnv * env,jobject container) {
+	jobject targetByteBuffer;
 	jbyteArray targetBuffer;
 
 	// fill field<timestamp> of container
-	long long timestamp = ((long long)(mCurBufInfo.timestamp.tv_sec) * 1000 \
-								+ mCurBufInfo.timestamp.tv_usec / 1000);
-	nestedEnv->SetLongField(container, stampID, timestamp);
+	struct timeval timestamp;	
+	gettimeofday(&timestamp, NULL);
+	long long stampMilli = ( ((long long)timestamp.tv_sec) * 1000 \
+								+ timestamp.tv_usec / 1000);
+	env->SetLongField(container, stampID, stampMilli);
 
 	// fill field<length> of container
 	int length = mCurBufInfo.length;
-	nestedEnv->SetIntField(container, sizeID, length);
+	env->SetIntField(container, sizeID, length);
 
 	// fill field<target payload> of container
-	target = nestedEnv->GetObjectField(container, targetID);
-	targetBuffer = (jbyteArray)nestedEnv->CallObjectMethod(target, arrayMethodID);
+	targetByteBuffer = env->GetObjectField(container, targetID);
+	targetBuffer = (jbyteArray)env->CallObjectMethod(targetByteBuffer, arrayMethodID);
 	
-	signed char *ptr = (signed char *)nestedEnv->GetByteArrayElements(targetBuffer, NULL);
+	signed char *ptr = (signed char *)env->GetByteArrayElements(targetBuffer, NULL);
 	memcpy(ptr, mBufferArray[mCurBufInfo.index].start, length);
-	nestedEnv->ReleaseByteArrayElements(targetBuffer, ptr, 0);
+	env->ReleaseByteArrayElements(targetBuffer, ptr, 0);
 }
 
-/*
- *	��֤peekFrameѭ��������֪ͨCameraUser�رգ��ر�����ͷ���Ƴ�CameraHolder
- */
+
 void Camera::closeCamera() {
 	if (mFD < 0)
 		return;
 
-	mPeekRun = false;	
+	mPeekRun = false;
 	
 }
 
@@ -431,13 +419,12 @@ Java_com_hongdian_usbcamera_Camera_openCamera
 
 	const char *cameraToken = NULL;
 	
-	Camera::init(env);
-	cameraToken = Camera::getCameraDevicePath(object);
+	cameraToken = Camera::getCameraDevicePath(env, object);
 	string cameraKey(cameraToken);
 	Camera *camera = CameraHolder::globalInstance()\
 								.getCamera(cameraKey);
 	if (NULL == camera) {
-		camera = new Camera(cameraToken, object);
+		camera = new Camera(cameraToken);
 
 		CameraHolder::globalInstance()\
 						.putCamera(cameraKey, camera);
@@ -457,12 +444,14 @@ JNIEXPORT jint JNICALL
 Java_com_hongdian_usbcamera_Camera_peekFrame
 (JNIEnv *env, jobject object) {
 
-	const char *cameraToken = Camera::getCameraDevicePath(object);
+	const char *cameraToken = Camera::getCameraDevicePath(env, object);
 	string cameraKey(cameraToken);
 	Camera *camera = CameraHolder::globalInstance()\
 									.getCamera(cameraKey);
+
+	camera->refreshEnv(env);
 	if (camera != NULL) {
-		camera->peekFrame();
+		camera->peekFrame(object);
 		return 0;
 	}
 	
@@ -473,12 +462,12 @@ JNIEXPORT void JNICALL
 Java_com_hongdian_usbcamera_Camera_fillFrame
 (JNIEnv *env, jobject object, jobject jContainer) {
 
-	const char *cameraToken = Camera::getCameraDevicePath(object);
+	const char *cameraToken = Camera::getCameraDevicePath(env, object);
 	string cameraKey(cameraToken);
 	Camera *camera = CameraHolder::globalInstance()\
 									.getCamera(cameraKey);
 	if (camera != NULL) {
-		camera->fillFrame(jContainer);
+		camera->fillFrame(env, jContainer);
 	}
 }
 
@@ -491,7 +480,7 @@ Java_com_hongdian_usbcamera_Camera_fillFrame
 JNIEXPORT void JNICALL 
 Java_com_hongdian_usbcamera_Camera_closeCamera
 (JNIEnv *env, jobject object) {
-	const char *cameraToken = Camera::getCameraDevicePath(object);
+	const char *cameraToken = Camera::getCameraDevicePath(env, object);
 	string cameraKey(cameraToken);
 	Camera *camera = CameraHolder::globalInstance()\
 									.getCamera(cameraKey);

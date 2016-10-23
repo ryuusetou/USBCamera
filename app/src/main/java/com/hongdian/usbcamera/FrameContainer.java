@@ -13,4 +13,8 @@ public class FrameContainer {
     public int size;
 
     public ByteBuffer target;
+
+    FrameContainer() {
+        target = ByteBuffer.allocate(1280 * 720 * 3);
+    }
 }

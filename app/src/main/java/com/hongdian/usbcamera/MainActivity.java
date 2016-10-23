@@ -30,6 +30,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onStop() {
+        super.onStop();
+
+        camera.stopStream();
+    }
+
+    private Camera camera;
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
@@ -38,7 +47,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void run() {
 
-                Camera camera = new Camera("/dev/video0", 1280, 720);
+                camera = new Camera("/dev/video0", 1280, 720);
 
                 camera.addUser(new MyCameraUser());
 
