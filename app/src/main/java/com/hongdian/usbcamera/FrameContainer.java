@@ -8,6 +8,10 @@ import java.nio.ByteBuffer;
 
 public class FrameContainer {
 
+    public int width;
+
+    public int height;
+
     public long timeStamp;
 
     public int size;
@@ -15,6 +19,6 @@ public class FrameContainer {
     public ByteBuffer target;
 
     FrameContainer() {
-        target = ByteBuffer.allocate(1280 * 720 * 3);
+        target = ByteBuffer.allocate(1280 * 720 * 2);
     }
 }

@@ -8,5 +8,7 @@ import java.nio.ByteBuffer;
 public interface CameraUser {
     FrameContainer onGetFrameContainer();
 
+    void onNotifyFilled();
+
     void onCameraClose();
 }

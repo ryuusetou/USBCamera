@@ -58,8 +58,14 @@ public class Camera {
         Log.d("DEBUG", "now startStream");
         nativeFD = openCamera();
 
-        if (nativeFD > 0)
-            peekFrame();
+        if (nativeFD > 0) {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    peekFrame();
+                }
+            }).start();
+        }
     }
 
     public void stopStream(){
@@ -77,18 +83,22 @@ public class Camera {
             container = user.onGetFrameContainer();
             if (container != null) {
                 fillFrame(container);
+                user.onNotifyFilled();
             }
         }
         mUserLock.unlock();
     }
 
     private void onCameraClose() {
+        nativeFD = -1;
+
         mUserLock.lock();
         for (CameraUser user : mUser) {
             user.onCameraClose();
         }
         mUserLock.unlock();
     }
+
 
     private native int openCamera();
 
