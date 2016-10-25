@@ -1,6 +1,7 @@
 package com.hongdian.usbcamera;
 
 import android.util.Log;
+import android.view.Surface;
 
 import java.nio.ByteBuffer;
 import java.util.LinkedList;
@@ -53,7 +54,6 @@ public class Camera {
         mUserLock.unlock();
     }
 
-
     public void startStream(){
         Log.d("DEBUG", "now startStream");
         nativeFD = openCamera();
@@ -65,6 +65,18 @@ public class Camera {
                     peekFrame();
                 }
             }).start();
+        }
+    }
+
+    public void startPreview(Surface surface) {
+        if (nativeFD > 0) {
+            nativeStartPreview(surface);
+        }
+    }
+
+    public void stopPreview() {
+        if (nativeFD > 0) {
+            nativeStopPreview();
         }
     }
 
@@ -101,6 +113,10 @@ public class Camera {
 
 
     private native int openCamera();
+
+    private native void nativeStartPreview(Surface view);
+
+    private native void nativeStopPreview();
 
     private native int peekFrame();
 

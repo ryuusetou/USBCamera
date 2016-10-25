@@ -15,6 +15,12 @@ android {
             moduleName "usbcamera"
             stl "gnustl_static"
             ldLibs "log"
+            ldLibs "gui"
+            ldLibs "utils"
+            ldLibs "ui"
+            ldLibs "android_runtime"
+            ldLibs "cutils"
+            abiFilter "armeabi"
         }
     }
     buildTypes {

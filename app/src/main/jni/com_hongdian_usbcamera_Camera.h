@@ -17,6 +17,22 @@ JNIEXPORT jint JNICALL Java_com_hongdian_usbcamera_Camera_openCamera
 
 /*
  * Class:     com_hongdian_usbcamera_Camera
+ * Method:    nativeStartPreview
+ * Signature: (Landroid/view/Surface;)V
+ */
+JNIEXPORT void JNICALL Java_com_hongdian_usbcamera_Camera_nativeStartPreview
+  (JNIEnv *, jobject, jobject);
+
+/*
+ * Class:     com_hongdian_usbcamera_Camera
+ * Method:    nativeStopPreview
+ * Signature: ()V
+ */
+JNIEXPORT void JNICALL Java_com_hongdian_usbcamera_Camera_nativeStopPreview
+  (JNIEnv *, jobject);
+
+/*
+ * Class:     com_hongdian_usbcamera_Camera
  * Method:    peekFrame
  * Signature: ()I
  */

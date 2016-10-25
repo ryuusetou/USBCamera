@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
@@ -98,25 +99,26 @@ public class MainActivity extends AppCompatActivity {
             mBitPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             mBitPaint.setFilterBitmap(true);
             mBitPaint.setDither(true);
-
-            intArray = new int[1280 * 720];
         }
 
         @Override
         public void surfaceCreated(SurfaceHolder surfaceHolder) {
             mCamera.addUser(this);
-
             mSurfaceHolder = surfaceHolder;
+
+            Log.d("Main", "surfaceCreated");
         }
 
         @Override
         public void surfaceChanged(SurfaceHolder surfaceHolder, int i, int i1, int i2) {
+            Log.d("Main", "surfaceChanged");
 
+            mCamera.startPreview(surfaceHolder.getSurface());
         }
 
         @Override
         public void surfaceDestroyed(SurfaceHolder surfaceHolder) {
-
+            Log.d("Main", "surfaceDestroyed");
         }
 
         @Override
@@ -135,6 +137,8 @@ public class MainActivity extends AppCompatActivity {
         public void onNotifyFilled() {
             Canvas canvas;
 
+            intArray = new int[1280 * 720];
+
             canvas = mSurfaceHolder.lockCanvas();
 
             mFrameLock.lock();
@@ -151,7 +155,6 @@ public class MainActivity extends AppCompatActivity {
 
         }
     }
-
 
     public static void convertYUYV2RGB8888(int[] rgba,
                                            byte[] data,
@@ -187,7 +190,6 @@ public class MainActivity extends AppCompatActivity {
 
         return 0xff000000 | (r << 16) | (g << 8) | b;
     }
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
