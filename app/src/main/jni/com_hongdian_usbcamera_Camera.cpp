@@ -30,7 +30,6 @@
 #include <gui/Surface.h>
 
 #include <ui/GraphicBufferMapper.h>
-
 #include <android_runtime/android_view_Surface.h>
 
 
@@ -43,7 +42,6 @@
 using namespace std;
 using namespace android;
 
-static sp<Surface> surface;
 
 static int ALIGN(int x, int y) {
     // y must be a power of 2.
@@ -51,129 +49,104 @@ static int ALIGN(int x, int y) {
 }
 
 static void render(
-        const void *data, size_t size, const sp<ANativeWindow> &nativeWindow,int width,int height) {
-	ALOGE("[%s]%d",__FILE__,__LINE__);
-    sp<ANativeWindow> mNativeWindow = nativeWindow;
+        const void *data, const sp<ANativeWindow> &nativeWindow,int width,int height) {
+
     int err;
-	int mCropWidth = width;
-	int mCropHeight = height;
-	
-	int halFormat = HAL_PIXEL_FORMAT_YV12;//ÑÕÉ«¿Õ¼ä
-    int bufWidth = (mCropWidth + 1) & ~1;//°´2¶ÔÆë
-    int bufHeight = (mCropHeight + 1) & ~1;
+    sp<ANativeWindow> mNativeWindow = nativeWindow;	
+	int halFormat = HAL_PIXEL_FORMAT_YV12;
+    int bufWidth = (width + 1) & ~1;
+    int bufHeight = (height + 1) & ~1;
 
-#if 0	
-	CHECK_EQ(0,
-            native_window_set_usage(
-            mNativeWindow.get(),
-            GRALLOC_USAGE_SW_READ_NEVER | GRALLOC_USAGE_SW_WRITE_OFTEN
-            | GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_EXTERNAL_DISP));
-
-    CHECK_EQ(0,
-            native_window_set_scaling_mode(
-            mNativeWindow.get(),
-            NATIVE_WINDOW_SCALING_MODE_SCALE_CROP));
-
-    // Width must be multiple of 32???
-	//ºÜÖØÒª,ÅäÖÃ¿í¸ßºÍºÍÖ¸¶¨ÑÕÉ«¿Õ¼äyuv420
-	//Èç¹ûÕâÀï²»ÅäÖÃºÃ£¬ÏÂÃædeque_bufferÖ»ÄÜÈ¥ÉêÇëÒ»¸öÄ¬ÈÏ¿í¸ßµÄÍ¼ÐÎ»º³åÇø
-    CHECK_EQ(0, native_window_set_buffers_geometry(
-                mNativeWindow.get(),
-                bufWidth,
-                bufHeight,
-                halFormat));
-#endif
-
-	native_window_set_usage(
-            mNativeWindow.get(),
+	native_window_set_usage(mNativeWindow.get(),
             GRALLOC_USAGE_SW_READ_NEVER | GRALLOC_USAGE_SW_WRITE_OFTEN
             | GRALLOC_USAGE_HW_TEXTURE | GRALLOC_USAGE_EXTERNAL_DISP);
 
+	native_window_set_buffers_dimensions(mNativeWindow.get(), 
+			bufWidth, bufHeight);
 
-	native_window_set_scaling_mode(
-            mNativeWindow.get(),
-            NATIVE_WINDOW_SCALING_MODE_SCALE_CROP);
+	native_window_set_scaling_mode(mNativeWindow.get(),
+        	NATIVE_WINDOW_SCALING_MODE_SCALE_CROP);
 
-
-	native_window_set_buffers_geometry(
-                mNativeWindow.get(),
-                bufWidth,
-                bufHeight,
-                halFormat);
+	native_window_set_buffers_format(mNativeWindow.get(), 
+			halFormat);	
 	
+	ANativeWindowBuffer *buf;
 	
-	ANativeWindowBuffer *buf;//ÃèÊöbuffer
-	//ÉêÇëÒ»¿é¿ÕÏÐµÄÍ¼ÐÎ»º³åÇø
-    if ((err = native_window_dequeue_buffer_and_wait(mNativeWindow.get(),
+	// ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½Ðµï¿½Í¼ï¿½Î»ï¿½ï¿½ï¿½ï¿½ï¿½
+    if ((err = native_window_dequeue_buffer_and_wait(
+			mNativeWindow.get(),
             &buf)) != 0) {
         ALOGW("Surface::dequeueBuffer returned error %d", err);
         return;
     }
 
     GraphicBufferMapper &mapper = GraphicBufferMapper::get();
-
-    Rect bounds(mCropWidth, mCropHeight);
-
+    Rect bounds(width, height);
     void *dst;
 
-#if 0
-    CHECK_EQ(0, mapper.lock(//ÓÃÀ´Ëø¶¨Ò»¸öÍ¼ÐÎ»º³åÇø²¢½«»º³åÇøÓ³Éäµ½ÓÃ»§½ø³Ì
-                buf->handle, GRALLOC_USAGE_SW_WRITE_OFTEN, bounds, &dst));//dst¾ÍÖ¸ÏòÍ¼ÐÎ»º³åÇøÊ×µØÖ·
-#endif
-
-	mapper.lock(//ÓÃÀ´Ëø¶¨Ò»¸öÍ¼ÐÎ»º³åÇø²¢½«»º³åÇøÓ³Éäµ½ÓÃ»§½ø³Ì
-                buf->handle, GRALLOC_USAGE_SW_WRITE_OFTEN, bounds, &dst);
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½Í¼ï¿½Î»ï¿½ï¿½ï¿½ï¿½ï¿½,ï¿½ï¿½ï¿½ï¿½Ó³ï¿½äµ½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½
+	mapper.lock(buf->handle, GRALLOC_USAGE_SW_WRITE_OFTEN, bounds, &dst);
 
     if (true) {
         size_t dst_y_size = buf->stride * buf->height;
-        size_t dst_c_stride = ALIGN(buf->stride / 2, 16);//1ÐÐv/uµÄ´óÐ¡
-        size_t dst_c_size = dst_c_stride * buf->height / 2;//u/vµÄ´óÐ¡
+        size_t dst_c_stride = ALIGN(buf->stride / 2, 16);	//1ï¿½ï¿½v/uï¿½Ä´ï¿½Ð¡
+        size_t dst_c_size = dst_c_stride * buf->height / 2;//u/vï¿½Ä´ï¿½Ð¡
         
-        memcpy(dst, data, dst_y_size + dst_c_size*2);//½«yuvÊý¾Ýcopyµ½Í¼ÐÎ»º³åÇø
+        memcpy(dst, data, dst_y_size + dst_c_size * 2);
     }
-
-    // CHECK_EQ(0, mapper.unlock(buf->handle));
 
 	mapper.unlock(buf->handle);
 
-    if ((err = mNativeWindow->queueBuffer(mNativeWindow.get(), buf,
-            -1)) != 0) {
+    if ((err = mNativeWindow->queueBuffer(mNativeWindow.get(), buf, -1)) != 0) {
         ALOGW("Surface::queueBuffer returned error %d", err);
     }
     buf = NULL;
 }
 
-static void nativeTest(){
-	ALOGE("[%s]%d",__FILE__,__LINE__);
-}
-
+#if 0
 static jboolean
 nativeSetVideoSurface(JNIEnv *env, jobject thiz, jobject jsurface){
-	ALOGE("[%s]%d",__FILE__,__LINE__);
+	// ALOGE("[%s]%d",__FILE__,__LINE__);
 	surface = android_view_Surface_getSurface(env, jsurface);
 	if(android::Surface::isValid(surface)){
-		ALOGE("surface is valid ");
+		// ALOGE("surface is valid ");
 	}else {
 		ALOGE("surface is invalid ");
 		return false;
 	}
-	ALOGE("[%s][%d]\n",__FILE__,__LINE__);
+	// ALOGE("[%s][%d]\n",__FILE__,__LINE__);
 	return true;
 }
 
 static void
-nativeShowYUV(JNIEnv *env, jobject thiz, char *yuv,jint width,jint height){
-	ALOGE("width = %d,height = %d",width,height);
-	// jint len = env->GetArrayLength(yuvData);
-	// ALOGE("len = %d",len);
-	// jbyte *byteBuf = env->GetByteArrayElements(yuvData, 0);
-	
-	render(yuv, 0,surface,width,height);
+nativeShowYUV(char *yuv,  int width, int height){
+	render(yuv, surface, width, height);
 }
+#endif
 
+static struct {
+	jclass clazz;
+	jfieldID stampID;
+	jfieldID lenID;
+	jfieldID targetID;
+} gContainerClassInfo;
+
+static struct {
+	jclass clazz;
+	jmethodID arrayID;
+} gByteBufferClassInfo;
+
+static struct {
+	jclass clazz;
+	jfieldID mDevPath;
+	jfieldID mNativeObject;
+	jmethodID onNewFrame;
+	jmethodID onCameraClose;	
+} gCameraClassInfo;
 
 
 class Camera {
+	
 #define BUFFER_NR			(4)
 	struct buffer {
 		void *start;
@@ -181,43 +154,41 @@ class Camera {
 	};
 	
 public:
-	Camera(const char *devPath, jobject jCamera);
-	Camera(const char *devPath, jobject jCamera, int cropWidth, int cropHeight);
+	static const char *getDevicePath(JNIEnv *env, jobject camera);
+
+	static Camera *getCamera(JNIEnv *env, jobject camera);
+
+	static void *setCamera(JNIEnv *env, jobject jcamera, Camera *camera);
+
+	static inline int YUV2RGBA888(int y, int u, int v);
+
+	static void frameYUYV2RGBA8888(int *out, char *buffer, int width, int height);
+
+	static void  Yvyu2Yuv420(char * yvyu, char *yuv420, int width, int height);
+	
+	Camera(const char *devPath);
+	Camera(const char *devPath, int cropWidth, int cropHeight);
 	~Camera();
 	
     int openCamera();
 	
-    void peekFrame(jobject jCamera);
+    void peekFrame(JNIEnv *env,jobject jCamera);
 
-	void fillWithFrame(jobject container);
+	void fillWithFrame(JNIEnv *env, jobject container);
 	
-	void closeCamera(jobject jCamera);
-
-	int setWindowSize(int width, int height);
+	void closeCamera(JNIEnv *env, jobject jCamera);
 	
-	void storeEnv(JNIEnv *env);
-
 	void setPreviewSurface(JNIEnv *env, jobject jsurface);
-
-	static const char *getCameraDevicePath(JNIEnv *env, jobject camera);
-
-	static void frameYUYV2RGBA8888(int *out, char *buffer, int width, int height);
-
-	static inline int YUV2RGBA888(int y, int u, int v);
 	
 private:
-	void drawPreviewFrame(char *buffer);
+	void drawPreview(char *buffer);
 	
-	int *mARGB;	
+	char *mYuv420;
 
-	char *yuv420;
-
-	
-	Surface *mPreviewSurface;
-	ANativeWindow_Buffer mPreviewDrawBuffer;
 	pthread_mutex_t mSurfaceLock;
+	sp<Surface> mPreviewSurface;
 	
-	const char *mCameraDevPath;
+	char *mCameraDevPath;
 	bool mPeekRun;
 	int mFD;
 
@@ -225,182 +196,125 @@ private:
 	int mHeight;
 	
 	struct v4l2_buffer mCurBufInfo;
-	struct buffer mBufferArray[BUFFER_NR];
-
-	JNIEnv *nestedEnv;
-	
-	jclass cameraClass;
-	
-	// method id of bytebuffer.array
-	jmethodID arrayMethodID;
-	
-	jfieldID stampID;
-	jfieldID sizeID;
-	jfieldID targetID;
+	struct buffer mBufferArray[BUFFER_NR];	
 };
 
-class CameraHolder {
-public:
-	static CameraHolder &globalInstance();
-
-	void putCamera(string &key, Camera *);
-    Camera *getCamera(string &key);	
-	void removeCamera(string &key);
-
-private:
-	CameraHolder();
-	~CameraHolder();
-
-	static CameraHolder *single;
-
-	static int ret;
-	static int init_lock();
-	static pthread_mutex_t mSingleLock;
-	
-	pthread_mutex_t mCameraLock;
-    std::map<string, Camera *> mOpenedCameras;
-};
-
-pthread_mutex_t CameraHolder::mSingleLock;
-int CameraHolder::ret = CameraHolder::init_lock();
-CameraHolder *CameraHolder::single;
-
-int CameraHolder::init_lock() {
-	return pthread_mutex_init(&mSingleLock, NULL);
-}
-
-CameraHolder &CameraHolder::globalInstance() {
-
-	if (single == NULL) {
-		pthread_mutex_lock(&mSingleLock);
-		if (single == NULL)			// double check here
-			single = new CameraHolder();	
-		pthread_mutex_unlock(&mSingleLock);
-	}
-
-	return *single;
-}
-
-CameraHolder::CameraHolder() {
-	pthread_mutex_init(&mCameraLock, NULL);
-}
-
-CameraHolder::~CameraHolder() {
-	pthread_mutex_destroy(&mCameraLock);
-}
-
-void CameraHolder::putCamera(string &key, Camera *camera){
-	pthread_mutex_lock(&mCameraLock);
-	mOpenedCameras.insert(std::make_pair(key, camera));
-	pthread_mutex_unlock(&mCameraLock);
-}
-
-Camera *CameraHolder::getCamera(string &key) {
-	std::map<string, Camera*>::iterator i;
-
-	pthread_mutex_lock(&mCameraLock);
-	i = mOpenedCameras.find(key);
-	if (i != mOpenedCameras.end()) {
-		pthread_mutex_unlock(&mCameraLock);
-		return i->second;
-	}
-	pthread_mutex_unlock(&mCameraLock);
-
-	return NULL;
-}
-
-void CameraHolder::removeCamera(string &key) {
-	pthread_mutex_lock(&mCameraLock);
-	mOpenedCameras.erase(key);
-	pthread_mutex_unlock(&mCameraLock);
-}
-
-static Surface *getNativeSurface(JNIEnv* env, jobject jsurface) {
-    jclass clazz = env->FindClass("android/view/Surface");
-    jfieldID field_surface;
-
-    field_surface = env->GetFieldID(clazz, "mNativeObject", "I");
-    if (field_surface == NULL)
-    {
-        return NULL;
-    }
-
-
-	Surface *surface = reinterpret_cast<Surface *>(env->GetIntField(jsurface, field_surface));
-
-	LOGD("getNativeSurface OK, surface=%p\n", surface);
-	
-    return surface;
-}
-
-void Camera::storeEnv(JNIEnv *env) {
-	jclass containerClass;	
-	jclass bytebufferClass;
-	nestedEnv = env;
-	
-	cameraClass = nestedEnv->FindClass("com/hongdian/usbcamera/Camera");
-	containerClass = nestedEnv->FindClass("com/hongdian/usbcamera/FrameContainer");
-	bytebufferClass = nestedEnv->FindClass("java/nio/ByteBuffer");
-
-	arrayMethodID = nestedEnv->GetMethodID(bytebufferClass, "array", "()[B");
-
-	stampID = nestedEnv->GetFieldID(containerClass, "timeStamp", "J");
-	sizeID = nestedEnv->GetFieldID(containerClass, "size", "I");
-	targetID = nestedEnv->GetFieldID(containerClass, "target", "Ljava/nio/ByteBuffer;");
-}
-
-const char *Camera::getCameraDevicePath(JNIEnv *env, jobject camera) {
-	jfieldID fid;
-	jstring devPath;
-
-	jclass cameraClass = env->FindClass("com/hongdian/usbcamera/Camera");	
-	fid = env->GetFieldID(cameraClass, "mCameraDevPath", "Ljava/lang/String;");
-	devPath = (jstring)env->GetObjectField(camera, fid);
+const char *Camera::getDevicePath(JNIEnv *env, jobject camera) {
+	jstring devPath;	
+	devPath = (jstring)env->GetObjectField(camera, gCameraClassInfo.mDevPath);
 	return env->GetStringUTFChars(devPath, NULL);
 }
 
-Camera::Camera(const char *devPath, jobject jCamera) 
-	: mCameraDevPath(devPath)
-	, mPeekRun(false)
+Camera *Camera::getCamera(JNIEnv *env, jobject jcamera) {
+	return reinterpret_cast<Camera *>(
+				env->GetIntField(jcamera, gCameraClassInfo.mNativeObject));
+}
+
+void *Camera::setCamera(JNIEnv *env, jobject jcamera, Camera *camera) {
+	env->SetIntField(jcamera, gCameraClassInfo.mNativeObject, 
+				reinterpret_cast<int>(camera));
+}
+
+void  Camera::Yvyu2Yuv420(char * yvyu, char *yuv420, int width, int height)  
+{  
+    int i,j;  
+    char *Y,*U,*V;  
+    char y1,y2,u,v;  
+      
+    Y = yuv420;  
+    U = yuv420 + width * height;
+    V = U + width * height / 4;  
+      
+    for(i = 0; i < height; i++) {  
+		for(j = 0; j < width / 2; j++) {
+	        y1 = *(yvyu + (i * width / 2 + j) * 4);  
+	        v  = *(yvyu + (i * width / 2 + j) * 4 + 1);  
+	        y2 = *(yvyu + (i * width / 2 + j) * 4 + 2);  
+	        u  = *(yvyu + (i * width / 2 + j) * 4 + 3);  
+	      
+		    *Y++ = y1; 
+		    *Y++ = y2;
+		      
+		    if(i % 2 == 0) {  
+				*U++=u;
+				*V++=v;  
+		    }  
+		}  
+    }  
+}
+
+int Camera::YUV2RGBA888(int y, int u, int v) {
+	int r, g, b;
+
+	r = (int)((y&0xff) + 1.4075 * ((v&0xff)-128));
+	g = (int)((y&0xff) - 0.3455 * ((u&0xff)-128) - 0.7169*((v&0xff)-128));
+	b = (int)((y&0xff) + 1.779 * ((u&0xff)-128));
+	r =(r<0? 0: r>255? 255 : r);
+	g =(g<0? 0: g>255? 255 : g);
+	b =(b<0? 0: b>255? 255 : b);
+
+	return 0x000000FF | (r << 24) | (g << 16) | (b << 8);
+}
+
+void Camera::frameYUYV2RGBA8888(int *out, char *data, int width, int height) {
+    int size = width * height * 2;
+    int u, v, y0, y1;
+    int count = 0;
+
+    for (int i = 0; i < size; ) {
+        y0 = data[i] & 0xff;
+        u = data[i + 1] & 0xff;
+        i += 2;
+
+        y1 = data[i] & 0xff;
+        v = data[i + 1] & 0xff;
+        i += 2;
+
+        out[count] = YUV2RGBA888(y0, u, v);
+        out[count + 1] = YUV2RGBA888(y1, u, v);
+        count += 2;
+    }
+}
+
+Camera::Camera(const char *devPath) 
+	: mPeekRun(false)
 	, mFD(-1)
 	, mWidth(1280)
 	, mHeight(720)
-	, mPreviewSurface(NULL)
-	, mARGB(NULL)
-	, yuv420(NULL){
+	, mYuv420(NULL){
 
-
+	if (devPath != NULL )
+		mCameraDevPath = strdup(devPath);
+	else
+		mCameraDevPath = NULL;
+	
 	pthread_mutex_init(&mSurfaceLock, NULL);
-
 }
 
 Camera::Camera
-(const char *devPath, jobject jCamera, int cropWidth, int cropHeight) 
-	: mCameraDevPath(devPath)
-	, mPeekRun(false)
+	(const char *devPath, int cropWidth, int cropHeight)
+	: mPeekRun(false)
 	, mFD(-1)
 	, mWidth(cropWidth)
 	, mHeight(cropHeight)
-	, mPreviewSurface(NULL)
-	, mARGB(NULL)
-	, yuv420(NULL){	
+	, mYuv420(NULL){	
+
+	if (devPath != NULL )
+		mCameraDevPath = strdup(devPath);
+	else
+		mCameraDevPath = NULL;
 
 	pthread_mutex_init(&mSurfaceLock, NULL);
 }
 
-Camera::~Camera(){
-	
+Camera::~Camera() {
+
+	pthread_mutex_destroy(&mSurfaceLock);
+
+	if (mCameraDevPath != NULL)
+		free(mCameraDevPath);	
 }
 
-int Camera::setWindowSize(int width, int height){
-	mWidth = width;
-	mHeight = height;
-}
-
-
-/*
- * no scale
- */
 int Camera::openCamera() {
 	enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
@@ -427,7 +341,8 @@ int Camera::openCamera() {
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	fmt.fmt.pix.width = mWidth;
 	fmt.fmt.pix.height = mHeight;
-	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;//V4L2_PIX_FMT_YUYV V4L2_PIX_FMT_MJPEG
+	//V4L2_PIX_FMT_YUYV V4L2_PIX_FMT_MJPEG
+	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
 	fmt.fmt.pix.field = V4L2_FIELD_INTERLACED;
 	if (ioctl(mFD, VIDIOC_S_FMT, &fmt) < 0) {
 		LOGD("VIDIOC_S_FMT failed\n");
@@ -453,8 +368,9 @@ int Camera::openCamera() {
         goto exit_tag;
     }
 
-    LOGD("VIDIOC_G_PARM %d %d\n", parm.parm.capture.timeperframe.denominator, parm.parm.capture.timeperframe.numerator );
-
+    LOGD("VIDIOC_G_PARM %d %d\n", 
+		parm.parm.capture.timeperframe.denominator, 
+		parm.parm.capture.timeperframe.numerator );
 
     struct v4l2_requestbuffers req;
 	req.count = BUFFER_NR;
@@ -516,122 +432,36 @@ exit_tag:
 	return mFD;
 }
 
-void Camera::setPreviewSurface(JNIEnv *env,jobject jsurface) {
-	Surface *surface = getNativeSurface(env, jsurface);
-
+void Camera::setPreviewSurface(JNIEnv *env, jobject jsurface) {
+	if (jsurface == NULL) {
+		pthread_mutex_lock(&mSurfaceLock);
+		mPreviewSurface = NULL;	
+		pthread_mutex_unlock(&mSurfaceLock);
+		return;
+	}
+	
+	sp<Surface> surface =
+		android_view_Surface_getSurface(env, jsurface);
+	if(!android::Surface::isValid(surface)){
+		ALOGE("surface is invalid, setPreviewSurface failed!");
+		return;
+	}
+	
 	pthread_mutex_lock(&mSurfaceLock);
-	mPreviewSurface = surface;
+	mPreviewSurface = surface;	
 	pthread_mutex_unlock(&mSurfaceLock);
 }
 
-int Camera::YUV2RGBA888(int y, int u, int v) {
-	int r, g, b;
-
-	r = (int)((y&0xff) + 1.4075 * ((v&0xff)-128));
-	g = (int)((y&0xff) - 0.3455 * ((u&0xff)-128) - 0.7169*((v&0xff)-128));
-	b = (int)((y&0xff) + 1.779 * ((u&0xff)-128));
-	r =(r<0? 0: r>255? 255 : r);
-	g =(g<0? 0: g>255? 255 : g);
-	b =(b<0? 0: b>255? 255 : b);
-
-	return 0x000000FF | (r << 24) | (g << 16) | (b << 8);
-}
-
-void Camera::frameYUYV2RGBA8888(int *out, char *data, int width, int height) {
-    int size = width * height * 2;
-    int u, v, y0, y1;
-    int count = 0;
-
-    for (int i = 0; i < size; ) {
-        y0 = data[i] & 0xff;
-        u = data[i + 1] & 0xff;
-        i += 2;
-
-        y1 = data[i] & 0xff;
-        v = data[i + 1] & 0xff;
-        i += 2;
-
-        out[count] = YUV2RGBA888(y0, u, v);
-        out[count + 1] = YUV2RGBA888(y1, u, v);
-        count += 2;
-    }
-}
-
-static void  yuyv_2_yuv420(char * yuyv, char *yuv420, int width, int height)  
-{  
-    int i,j;  
-    char *Y,*U,*V;  
-    char y1,y2,u,v;  
-      
-    Y = yuv420;  
-    U = yuv420 + width * height;
-    V = U + width * height / 4;  
-      
-    for(i = 0; i < height; i++) {  
-		for(j = 0; j < width / 2; j++) {
-	        y1 = *(yuyv + (i * width / 2 + j) * 4);  
-	        v  = *(yuyv + (i * width / 2 + j) * 4 + 1);  
-	        y2 = *(yuyv + (i * width / 2 + j) * 4 + 2);  
-	        u  = *(yuyv + (i * width / 2 + j) * 4 + 3);  
-	      
-		    *Y++=y1;  
-		    *Y++=y2;  
-		      
-		    if(i % 2 == 0) {  
-				*U++=u;
-				*V++=v;  
-		    }  
-		}  
-    }  
-  
-}  
-
-
-void Camera::drawPreviewFrame(char *buffer) {
-
-	if (yuv420 == NULL) {
-		yuv420 = new char[mWidth * mHeight * 3 / 2];
+void Camera::drawPreview(char *buffer) {
+	if (mYuv420 == NULL) {
+		mYuv420 = new char[mWidth * mHeight * 3 / 2];
 	}
 
-	yuyv_2_yuv420(buffer, yuv420, mWidth, mHeight);	
-	
-	nativeShowYUV(nestedEnv,  NULL, yuv420, mWidth, mHeight);
-
-
-#if 0
-	if (mARGB == NULL) {
-		mARGB = new int[mWidth * mHeight];
-	}
-
-	ARect rect;
-
-	rect.left = 0;
-	rect.top = 0;
-	rect.right = rect.left + 100;
-	rect.bottom = rect.bottom + 100;
-	
-
-	LOGD("drawPreviewFrame buffer=%p mARGB=%p\n", buffer, mARGB);
-
-	frameYUYV2RGBA8888(mARGB, buffer, mWidth, mHeight);
-
-	mPreviewSurface->getIGraphicBufferProducer();
-
-    
-	LOGD("mPreviewSurface =%p\n", mPreviewSurface);	
-	
-	mPreviewSurface->lock(&mPreviewDrawBuffer, &rect);	
-	LOGD("drawview", "%d %d %d %d %p\n", \
-		mPreviewDrawBuffer.width, mPreviewDrawBuffer.height,\
-		mPreviewDrawBuffer.stride, mPreviewDrawBuffer.format,\
-		mPreviewDrawBuffer.bits);
-	mPreviewSurface->unlockAndPost();	
-#endif
-
+	Yvyu2Yuv420(buffer, mYuv420, mWidth, mHeight);
+	render(mYuv420, mPreviewSurface, mWidth, mHeight);
 }
 
-void Camera::peekFrame(jobject jCamera) {
-
+void Camera::peekFrame(JNIEnv *env,jobject jCamera) {
 	if (mFD < 0) {
 		LOGD("camera not open, open first\n");
 		return;
@@ -640,9 +470,6 @@ void Camera::peekFrame(jobject jCamera) {
 	int r;
 	fd_set fds;
 	struct timeval tv;
-
-	jmethodID onNewFrameMID = \
-		nestedEnv->GetMethodID(cameraClass, "onNewFrame", "()V");	
 
 	mPeekRun = true;
 	while(mPeekRun) {
@@ -684,21 +511,15 @@ void Camera::peekFrame(jobject jCamera) {
 			}
 		}
 
-		LOGD("buffer index:%d\n", mCurBufInfo.index);
-
-#if 0
-		pthread_mutex_lock(&mSurfaceLock);
-		if (mPreviewSurface != NULL) {
-			drawPreviewFrame((char *)(mBufferArray[mCurBufInfo.index].start));
-		}	
-		pthread_mutex_unlock(&mSurfaceLock);
-#endif
-
-		if (surface != NULL)
-			drawPreviewFrame((char *)(mBufferArray[mCurBufInfo.index].start));	
-		
-		// nestedEnv->CallVoidMethod(jCamera, onNewFrameMID);
+		// LOGD("buffer index:%d\n", mCurBufInfo.index);
 		// LOGD("A Frame is readable\n");
+
+		pthread_mutex_lock(&mSurfaceLock);
+		if (mPreviewSurface.get() != NULL)
+			drawPreview((char *)(mBufferArray[mCurBufInfo.index].start));	
+		pthread_mutex_unlock(&mSurfaceLock);
+		
+		// env->CallVoidMethod(jCamera, onNewFrameMID);
 		
 		// Retrieve
 		if (0 > ioctl(mFD, VIDIOC_QBUF, &mCurBufInfo)) {
@@ -710,11 +531,10 @@ void Camera::peekFrame(jobject jCamera) {
 exit_tag:	
 	mPeekRun = false;
 
-	closeCamera(jCamera);
-	
+	closeCamera(env, jCamera);
 }
 
-void Camera::fillWithFrame(jobject container) {
+void Camera::fillWithFrame(JNIEnv *env, jobject container) {
 	jobject targetByteBuffer;
 	jbyteArray targetBuffer;
 
@@ -723,34 +543,63 @@ void Camera::fillWithFrame(jobject container) {
 	gettimeofday(&timestamp, NULL);
 	long long stampMilli = ( ((long long)timestamp.tv_sec) * 1000 \
 								+ timestamp.tv_usec / 1000);
-	nestedEnv->SetLongField(container, stampID, stampMilli);
+	env->SetLongField(container, gContainerClassInfo.stampID, stampMilli);
 
 	// fill field<length> of container
 	int length = mCurBufInfo.length;
-	nestedEnv->SetIntField(container, sizeID, length);
+	env->SetIntField(container, gContainerClassInfo.lenID, length);
 
 	// fill field<target payload> of container
-	targetByteBuffer = nestedEnv->GetObjectField(container, targetID);
-	targetBuffer = (jbyteArray)nestedEnv->CallObjectMethod(targetByteBuffer, arrayMethodID);
+	targetByteBuffer = env->GetObjectField(container, 
+					gContainerClassInfo.targetID);
+	targetBuffer = (jbyteArray)env->CallObjectMethod(targetByteBuffer, 
+					gByteBufferClassInfo.arrayID);
 	
-	signed char *ptr = (signed char *)nestedEnv->GetByteArrayElements(targetBuffer, NULL);
+	signed char *ptr = (signed char *)env->GetByteArrayElements(targetBuffer, NULL);
 	memcpy(ptr, mBufferArray[mCurBufInfo.index].start, length);
-	nestedEnv->ReleaseByteArrayElements(targetBuffer, ptr, 0);
+	env->ReleaseByteArrayElements(targetBuffer, ptr, 0);	
 }
 
-
-void Camera::closeCamera(jobject jCamera) {
+void Camera::closeCamera(JNIEnv *env, jobject jCamera) {
+	mPeekRun = false;
+	
 	if (mFD < 0)
 		return;
-
-	mPeekRun = false;
-
+	
 	close(mFD);
 	mFD = -1;
+	
+	if (mYuv420 != NULL)
+		delete [] mYuv420;
 
-	jmethodID onCloseMethodID;
-	onCloseMethodID = nestedEnv->GetMethodID(cameraClass, "onCameraClose", "()V");
-	nestedEnv->CallVoidMethod(jCamera, onCloseMethodID);
+	env->CallVoidMethod(jCamera, gCameraClassInfo.onCameraClose);
+}
+
+JNIEXPORT void JNICALL
+Java_com_hongdian_usbcamera_Camera_initNative
+(JNIEnv *env, jobject object) {
+
+	gCameraClassInfo.clazz = env->FindClass("com/hongdian/usbcamera/Camera");
+	gCameraClassInfo.mDevPath = env->GetFieldID(gCameraClassInfo.clazz, 
+										"mDevPath", "Ljava/lang/String;");	
+	gCameraClassInfo.mNativeObject = env->GetFieldID(gCameraClassInfo.clazz,
+														"mNativeObject", "I");
+	gCameraClassInfo.onNewFrame = env->GetMethodID(gCameraClassInfo.clazz,
+														"onNewFrame", "()V");
+	gCameraClassInfo.onCameraClose = env->GetMethodID(gCameraClassInfo.clazz,
+														"onCameraClose", "()V");
+
+	gByteBufferClassInfo.clazz = env->FindClass("java/nio/ByteBuffer");
+	gByteBufferClassInfo.arrayID = env->GetMethodID(gByteBufferClassInfo.clazz,
+														"array", "()[B");	
+
+	gContainerClassInfo.clazz = env->FindClass("com/hongdian/usbcamera/FrameContainer");
+	gContainerClassInfo.stampID = env->GetFieldID(gContainerClassInfo.clazz,
+													"timeStamp", "J");
+	gContainerClassInfo.lenID = env->GetFieldID(gContainerClassInfo.clazz,
+													"len", "I");
+	gContainerClassInfo.targetID = env->GetFieldID(gContainerClassInfo.clazz,
+													"target", "Ljava/nio/ByteBuffer;");
 }
 
 /*
@@ -760,23 +609,24 @@ void Camera::closeCamera(jobject jCamera) {
  */
 JNIEXPORT jint JNICALL 
 Java_com_hongdian_usbcamera_Camera_openCamera
-(JNIEnv *env, jobject object) {
+(JNIEnv *env, jobject object, jint width, jint height) {
 
-	const char *cameraToken = NULL;
-	
-	cameraToken = Camera::getCameraDevicePath(env, object);
-	string cameraKey(cameraToken);
-	Camera *camera = CameraHolder::globalInstance()\
-								.getCamera(cameraKey);
-	if (NULL == camera) {
-		camera = new Camera(cameraToken, object);
+	if (Camera::getCamera(env, object) == NULL) {
+		const char *devPath = 
+				Camera::getDevicePath(env, object);
 
-		CameraHolder::globalInstance()\
-						.putCamera(cameraKey, camera);
-		return camera->openCamera();
-	} 
+		if (devPath != NULL) {
+			int fd = -1;
+			Camera *camera = 
+				new Camera(devPath, width, height);
+			
+			if ( (fd = camera->openCamera()) > 0) {
+				Camera::setCamera(env, object, camera);
+				return fd;
+			}		
+		}					
+	}
 
-	// can not reopen
 	return -1;
 }
 
@@ -788,18 +638,12 @@ Java_com_hongdian_usbcamera_Camera_openCamera
 JNIEXPORT jint JNICALL 
 Java_com_hongdian_usbcamera_Camera_peekFrame
 (JNIEnv *env, jobject object) {
-
-	const char *cameraToken = Camera::getCameraDevicePath(env, object);
-	string cameraKey(cameraToken);
-	Camera *camera = CameraHolder::globalInstance()\
-									.getCamera(cameraKey);
-
+	Camera *camera = Camera::getCamera(env, object);
 	if (camera != NULL) {
-		camera->storeEnv(env);
-		camera->peekFrame(object);
+		camera->peekFrame(env, object);
 		return 0;
-	}
-	
+	}	
+
 	return -1;
 }
 
@@ -807,13 +651,10 @@ JNIEXPORT void JNICALL
 Java_com_hongdian_usbcamera_Camera_fillFrame
 (JNIEnv *env, jobject object, jobject jContainer) {
 
-	const char *cameraToken = Camera::getCameraDevicePath(env, object);
-	string cameraKey(cameraToken);
-	Camera *camera = CameraHolder::globalInstance()\
-									.getCamera(cameraKey);
+	Camera *camera = Camera::getCamera(env, object);
 	if (camera != NULL) {
-		camera->fillWithFrame(jContainer);
-	}
+		camera->fillWithFrame(env, jContainer);
+	}	
 }
 
 /*
@@ -824,14 +665,11 @@ Java_com_hongdian_usbcamera_Camera_fillFrame
 JNIEXPORT void JNICALL 
 Java_com_hongdian_usbcamera_Camera_closeCamera
 (JNIEnv *env, jobject object) {
-	const char *cameraToken = Camera::getCameraDevicePath(env, object);
-	string cameraKey(cameraToken);
-	Camera *camera = CameraHolder::globalInstance()\
-									.getCamera(cameraKey);
+	Camera *camera = Camera::getCamera(env, object);
 	if (camera != NULL) {
-		camera->closeCamera(object);
-		CameraHolder::globalInstance().removeCamera(cameraKey);
+		camera->closeCamera(env, object);
 		delete camera;
+		Camera::setCamera(env, object, NULL);
 	}
 }
 
@@ -843,18 +681,10 @@ Java_com_hongdian_usbcamera_Camera_closeCamera
 JNIEXPORT void JNICALL 
 Java_com_hongdian_usbcamera_Camera_nativeStartPreview
 (JNIEnv *env, jobject object, jobject jsurface) {
-
-#if 0
-	const char *cameraToken = Camera::getCameraDevicePath(env, object);
-	string cameraKey(cameraToken);
-	Camera *camera = CameraHolder::globalInstance()\
-									.getCamera(cameraKey);
+	Camera *camera = Camera::getCamera(env, object);
 	if (camera != NULL) {
-		camera->setPreviewSurface(env, jsurface);
+		camera->setPreviewSurface(env, jsurface);		
 	}
-#endif
-
-	nativeSetVideoSurface(env, object, jsurface);
 }
 
 /*
@@ -865,21 +695,9 @@ Java_com_hongdian_usbcamera_Camera_nativeStartPreview
 JNIEXPORT void JNICALL 
 Java_com_hongdian_usbcamera_Camera_nativeStopPreview
 (JNIEnv *env, jobject object) {
-
-#if 0
-	LOGD("nativeStartPreview\n");
-
-	const char *cameraToken = Camera::getCameraDevicePath(env, object);
-	string cameraKey(cameraToken);
-	Camera *camera = CameraHolder::globalInstance()\
-									.getCamera(cameraKey);
+	Camera *camera = Camera::getCamera(env, object);
 	if (camera != NULL) {
-		camera->setPreviewSurface(env, NULL);
+		camera->setPreviewSurface(env, NULL);		
 	}
-#endif
-
-	surface = NULL;
 }
-
-
 

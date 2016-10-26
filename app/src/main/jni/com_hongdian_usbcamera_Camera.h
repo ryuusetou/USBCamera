@@ -9,11 +9,19 @@ extern "C" {
 #endif
 /*
  * Class:     com_hongdian_usbcamera_Camera
+ * Method:    initNative
+ * Signature: ()V
+ */
+JNIEXPORT void JNICALL Java_com_hongdian_usbcamera_Camera_initNative
+  (JNIEnv *, jobject);
+
+/*
+ * Class:     com_hongdian_usbcamera_Camera
  * Method:    openCamera
  * Signature: ()I
  */
 JNIEXPORT jint JNICALL Java_com_hongdian_usbcamera_Camera_openCamera
-  (JNIEnv *, jobject);
+  (JNIEnv *, jobject, jint, jint);
 
 /*
  * Class:     com_hongdian_usbcamera_Camera

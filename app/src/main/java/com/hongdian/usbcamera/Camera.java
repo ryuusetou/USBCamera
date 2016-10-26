@@ -1,9 +1,7 @@
 package com.hongdian.usbcamera;
 
-import android.util.Log;
 import android.view.Surface;
 
-import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -15,28 +13,37 @@ public class Camera {
 
     static {
         System.loadLibrary("usbcamera");
+
+        initNative();
     }
 
     private Lock mUserLock;
 
     private LinkedList<CameraUser> mUser;
 
-    private int nativeFD;
+    private int mNativeFD;
 
-    private String mCameraDevPath;
+    private String mDevPath;
 
     private int mWidth;
 
     private int mHeight;
 
+    private int mNativeObject;
+
     public Camera(String camera, int width, int height){
         mUserLock = new ReentrantLock();
-        mUser = new LinkedList<>();
-        nativeFD = -1;
 
-        mCameraDevPath = camera;
+        mUser = new LinkedList<>();
+
+        mNativeFD = -1;
+
+        mNativeObject = 0;
+
+        mDevPath = camera;
 
         mWidth = width;
+
         mHeight = height;
     }
 
@@ -55,10 +62,9 @@ public class Camera {
     }
 
     public void startStream(){
-        Log.d("DEBUG", "now startStream");
-        nativeFD = openCamera();
+        mNativeFD = openCamera(mWidth, mHeight);
 
-        if (nativeFD > 0) {
+        if (mNativeFD > 0) {
             new Thread(new Runnable() {
                 @Override
                 public void run() {
@@ -69,21 +75,21 @@ public class Camera {
     }
 
     public void startPreview(Surface surface) {
-        if (nativeFD > 0) {
+        if (mNativeFD > 0) {
             nativeStartPreview(surface);
         }
     }
 
     public void stopPreview() {
-        if (nativeFD > 0) {
+        if (mNativeFD > 0) {
             nativeStopPreview();
         }
     }
 
     public void stopStream(){
-        if (nativeFD > 0) {
+        if (mNativeFD > 0) {
             closeCamera();
-            nativeFD = -1;
+            mNativeFD = -1;
         }
     }
 
@@ -102,7 +108,7 @@ public class Camera {
     }
 
     private void onCameraClose() {
-        nativeFD = -1;
+        mNativeFD = -1;
 
         mUserLock.lock();
         for (CameraUser user : mUser) {
@@ -111,8 +117,9 @@ public class Camera {
         mUserLock.unlock();
     }
 
+    static private native void initNative();
 
-    private native int openCamera();
+    private native int openCamera(int width, int height);
 
     private native void nativeStartPreview(Surface view);
 

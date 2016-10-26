@@ -14,7 +14,7 @@ public class FrameContainer {
 
     public long timeStamp;
 
-    public int size;
+    public int len;
 
     public ByteBuffer target;
 
