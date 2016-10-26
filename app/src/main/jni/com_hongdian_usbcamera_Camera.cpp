@@ -44,13 +44,11 @@ using namespace android;
 
 
 static int ALIGN(int x, int y) {
-    // y must be a power of 2.
     return (x + y - 1) & ~(y - 1);
 }
 
 static void render(
         const void *data, const sp<ANativeWindow> &nativeWindow,int width,int height) {
-
     int err;
     sp<ANativeWindow> mNativeWindow = nativeWindow;	
 	int halFormat = HAL_PIXEL_FORMAT_YV12;
@@ -71,8 +69,7 @@ static void render(
 			halFormat);	
 	
 	ANativeWindowBuffer *buf;
-	
-	// ����һ����е�ͼ�λ�����
+
     if ((err = native_window_dequeue_buffer_and_wait(
 			mNativeWindow.get(),
             &buf)) != 0) {
@@ -84,13 +81,14 @@ static void render(
     Rect bounds(width, height);
     void *dst;
 
-	// ��������һ��ͼ�λ�����,����ӳ�䵽�û�����
 	mapper.lock(buf->handle, GRALLOC_USAGE_SW_WRITE_OFTEN, bounds, &dst);
 
     if (true) {
         size_t dst_y_size = buf->stride * buf->height;
-        size_t dst_c_stride = ALIGN(buf->stride / 2, 16);	//1��v/u�Ĵ�С
-        size_t dst_c_size = dst_c_stride * buf->height / 2;//u/v�Ĵ�С
+        size_t dst_c_stride = ALIGN(buf->stride / 2, 16);	
+        size_t dst_c_size = dst_c_stride * buf->height / 2;
+
+		// LOGD("%d %d %d", buf->width, buf->height, buf->stride); 1280 720 1280
         
         memcpy(dst, data, dst_y_size + dst_c_size * 2);
     }
@@ -103,32 +101,13 @@ static void render(
     buf = NULL;
 }
 
-#if 0
-static jboolean
-nativeSetVideoSurface(JNIEnv *env, jobject thiz, jobject jsurface){
-	// ALOGE("[%s]%d",__FILE__,__LINE__);
-	surface = android_view_Surface_getSurface(env, jsurface);
-	if(android::Surface::isValid(surface)){
-		// ALOGE("surface is valid ");
-	}else {
-		ALOGE("surface is invalid ");
-		return false;
-	}
-	// ALOGE("[%s][%d]\n",__FILE__,__LINE__);
-	return true;
-}
-
-static void
-nativeShowYUV(char *yuv,  int width, int height){
-	render(yuv, surface, width, height);
-}
-#endif
-
 static struct {
 	jclass clazz;
 	jfieldID stampID;
 	jfieldID lenID;
 	jfieldID targetID;
+	jfieldID widthID;
+	jfieldID heightID;
 } gContainerClassInfo;
 
 static struct {
@@ -549,6 +528,10 @@ void Camera::fillWithFrame(JNIEnv *env, jobject container) {
 	int length = mCurBufInfo.length;
 	env->SetIntField(container, gContainerClassInfo.lenID, length);
 
+	env->SetIntField(container, gContainerClassInfo.widthID, mWidth);
+	
+	env->SetIntField(container, gContainerClassInfo.heightID, mHeight);
+
 	// fill field<target payload> of container
 	targetByteBuffer = env->GetObjectField(container, 
 					gContainerClassInfo.targetID);
@@ -557,7 +540,7 @@ void Camera::fillWithFrame(JNIEnv *env, jobject container) {
 	
 	signed char *ptr = (signed char *)env->GetByteArrayElements(targetBuffer, NULL);
 	memcpy(ptr, mBufferArray[mCurBufInfo.index].start, length);
-	env->ReleaseByteArrayElements(targetBuffer, ptr, 0);	
+	env->ReleaseByteArrayElements(targetBuffer, ptr, 0);
 }
 
 void Camera::closeCamera(JNIEnv *env, jobject jCamera) {
@@ -600,6 +583,10 @@ Java_com_hongdian_usbcamera_Camera_initNative
 													"len", "I");
 	gContainerClassInfo.targetID = env->GetFieldID(gContainerClassInfo.clazz,
 													"target", "Ljava/nio/ByteBuffer;");
+	gContainerClassInfo.widthID = env->GetFieldID(gContainerClassInfo.clazz,
+													"width", "I");
+	gContainerClassInfo.heightID = env->GetFieldID(gContainerClassInfo.clazz,
+													"height", "I");
 }
 
 /*

@@ -3,156 +3,39 @@ package com.hongdian.usbcamera;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.media.MediaCodec;
+import android.media.MediaCodecInfo;
+import android.media.MediaFormat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class MainActivity extends AppCompatActivity {
-
-
-//    private class MyCameraUser implements CameraUser{
-//        private FrameContainer container;
-//
-//        private FileOutputStream mFos;
-//
-//        private File mPictureFile;
-//
-//        private int mPictureCount;
-//
-//        public MyCameraUser() {
-//            container = new FrameContainer();
-//
-//            mPictureFile = new File(Environment.getExternalStorageDirectory(), "1.yuyv");
-//
-//            mPictureCount = 0;
-//        }
-//
-//        @Override
-//        public FrameContainer onGetFrameContainer() {
-//            // Log.d("CU", "len:" + container.size + " stamp:" + container.timeStamp);
-//
-//            return container;
-//        }
-//
-//        @Override
-//        public void onNotifyFilled() {
-//            // Log.d("CU", "Frame prepared");
-//
-//            if (mPictureCount++ == 10) {
-//                Log.d("CU", "onNotifyFilled: save to file " + mPictureFile.getAbsolutePath());
-//
-//                try {
-//                    mFos = new FileOutputStream(mPictureFile);
-//                } catch (FileNotFoundException e) {
-//                    Log.d("CU", "file not found");
-//                    e.printStackTrace();
-//                    return;
-//                }
-//
-//                try {
-//                    mFos.write(container.target.array());
-//                    mFos.close();
-//                } catch (IOException e) {
-//                    Log.d("CU", "file write close IOException");
-//                    e.printStackTrace();
-//                    return;
-//                }
-//            }
-//        }
-//
-//        @Override
-//        public void onCameraClose() {
-//            Log.d("CU", "camera closed");
-//        }
-//    }
-
     private SurfaceView surfaceView;
 
-    private Camera camera;
+    private Camera mCamera;
 
-    private class CameraPreviewUser implements CameraUser, SurfaceHolder.Callback {
-        private SurfaceHolder mSurfaceHolder;
-
-        private Paint mBitPaint;
-
-        private FrameContainer mContainer;
-
-        private Camera mCamera;
-
-        private Lock mFrameLock;
-
-        int [] intArray;
-
-
-        public CameraPreviewUser(Camera camera) {
-            mContainer = new FrameContainer();
-
-            mCamera = camera;
-
-            mFrameLock = new ReentrantLock();
-
-            mBitPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            mBitPaint.setFilterBitmap(true);
-            mBitPaint.setDither(true);
-        }
-
+    private class CameraPreview implements SurfaceHolder.Callback {
         @Override
         public void surfaceCreated(SurfaceHolder surfaceHolder) {
-            mCamera.addUser(this);
-            mSurfaceHolder = surfaceHolder;
-
-            Log.d("Main", "surfaceCreated");
-        }
-
-        @Override
-        public void surfaceChanged(SurfaceHolder surfaceHolder, int i, int i1, int i2) {
-            Log.d("Main", "surfaceChanged");
-
             mCamera.startPreview(surfaceHolder.getSurface());
         }
 
         @Override
+        public void surfaceChanged(SurfaceHolder surfaceHolder, int i, int i1, int i2) {
+
+        }
+
+        @Override
         public void surfaceDestroyed(SurfaceHolder surfaceHolder) {
-            Log.d("Main", "surfaceDestroyed");
-        }
-
-        @Override
-        public FrameContainer onGetFrameContainer() {
-            FrameContainer container = null;
-
-            if (mFrameLock.tryLock()) {
-                container = mContainer;
-                mFrameLock.unlock();
-            }
-
-            return container;
-        }
-
-        @Override
-        public void onNotifyFilled() {
-            Canvas canvas;
-
-            intArray = new int[1280 * 720];
-
-            canvas = mSurfaceHolder.lockCanvas();
-
-            mFrameLock.lock();
-            convertYUYV2RGB8888(intArray, mContainer.target.array(), 1280, 720);
-            mFrameLock.unlock();
-
-            Bitmap bmp = Bitmap.createBitmap(intArray, 1280, 720, Bitmap.Config.ARGB_8888);
-            canvas.drawBitmap(bmp, 0, 0, mBitPaint);
-            mSurfaceHolder.unlockCanvasAndPost(canvas);
-        }
-
-        @Override
-        public void onCameraClose() {
-
+            mCamera.stopPreview();
         }
     }
 
@@ -165,11 +48,11 @@ public class MainActivity extends AppCompatActivity {
 
         for (int i = 0; i < size; ) {
             y0 = data[i] & 0xff;
-            u = data[i + 1] & 0xff;
+            v = data[i + 1] & 0xff;
             i += 2;
 
             y1 = data[i] & 0xff;
-            v = data[i + 1] & 0xff;
+            u = data[i + 1] & 0xff;
             i += 2;
 
             rgba[count] = convertYUVtoRGB(y0, u, v);
@@ -188,20 +71,99 @@ public class MainActivity extends AppCompatActivity {
         g =(g<0? 0: g>255? 255 : g);
         b =(b<0? 0: b>255? 255 : b);
 
-        return 0xff000000 | (r << 16) | (g << 8) | b;
+        return 0xff000000 | (b << 16) | (g << 8) | r;
     }
+
+    private class CameraEncoder implements CameraUser{
+
+        public CameraEncoder(Camera camera) {
+
+        }
+
+        @Override
+        public FrameContainer onGetFrameContainer() {
+            return null;
+        }
+
+        @Override
+        public void onNotifyFilled() {
+
+        }
+
+        @Override
+        public void onCameraClose() {
+
+        }
+    }
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        camera = new Camera("/dev/video0", 1280, 720);
-        camera.startStream();
+        mCamera = new Camera("/dev/video0", 1280, 720);
+        mCamera.startStream();
 
         surfaceView = (SurfaceView)findViewById(R.id.play_view);
         SurfaceHolder surfaceHolder = surfaceView.getHolder();
 
-        surfaceHolder.addCallback(new CameraPreviewUser(camera));
+        // surfaceHolder.addCallback(new CameraPreview());
+
+        //////////////////////////////////////////////////
+
+        MediaFormat format = MediaFormat.createVideoFormat(
+                MediaFormat.MIMETYPE_VIDEO_AVC,
+                1280, 720);
+        format.setInteger(MediaFormat.KEY_FRAME_RATE,
+                10);
+        format.setInteger(MediaFormat.KEY_BIT_RATE,
+                2 * 1000 * 1000);
+        format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+        format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
+                MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+
+        final MediaCodec encoder;
+        try {
+            encoder = MediaCodec.createEncoderByType(
+                            format.getString(MediaFormat.KEY_MIME));
+
+            encoder.configure(format, null, null,
+                            MediaCodec.CONFIGURE_FLAG_ENCODE);
+
+            mCamera.startPreview(encoder.createInputSurface());
+
+            encoder.start();
+
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    MediaCodec.BufferInfo outInfo = new MediaCodec.BufferInfo();
+
+                    ByteBuffer [] outBuffers = encoder.getOutputBuffers();
+                    for (;;) {
+                        int outputBufferId = encoder.dequeueOutputBuffer(outInfo, -1);
+                        if (outputBufferId >= 0) {
+                            // outputBuffers[outputBufferId] is ready to be processed or rendered.
+
+                            Log.d("CODEC", "out size:" + outInfo.size + " timeStamp:" +
+                                                outInfo.presentationTimeUs);
+
+                            encoder.releaseOutputBuffer(outputBufferId, false);
+                        } else if (outputBufferId == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
+                            // outputBuffers = encoder.getOutputBuffers();
+                        } else if (outputBufferId == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                            // Subsequent data will conform to new format.
+                            MediaFormat format = encoder.getOutputFormat();
+                        }
+                    }
+                }
+            }).start();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
     }
 }

@@ -117,7 +117,7 @@ public class Camera {
         mUserLock.unlock();
     }
 
-    static private native void initNative();
+    private static native void initNative();
 
     private native int openCamera(int width, int height);
 
