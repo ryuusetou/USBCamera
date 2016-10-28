@@ -74,6 +74,36 @@ static void copyFrame
 	}
 }
 
+static void 
+copyFrameCenterGravity
+(void *dest, const void *src, int dest_w, int dest_h, int src_w, int src_h, char bpp_shift) {	
+	if (src_w < dest_w || src_h < dest_h) {
+		LOGD("This resolution don't be supported.w%d h%d", dest_w, dest_h);
+		return;
+	}
+
+	int horizontal_margin = (src_w - dest_w + 1) >> 1;
+	int vertical_margin = (src_h - dest_h + 1) >> 1;
+
+	// LOGD("hm:%d vm:%d", horizontal_margin, vertical_margin);
+
+	unsigned long src_off = 
+		( (vertical_margin * src_w) + horizontal_margin) << bpp_shift;
+
+	unsigned long copy_once = dest_w << bpp_shift;
+
+	unsigned long copyed = 0;
+	
+	
+	for (int i = 0; i < dest_h; i++) {
+		// LOGD("copped:%ld src_offset:%ld", copyed, src_off);
+		
+		memcpy(dest + copyed, src + src_off, copy_once);
+		copyed += copy_once;
+		
+		src_off += (copy_once + (horizontal_margin << (bpp_shift + 1)));
+	}	
+}
 
 static void render(
         const void *data, const sp<ANativeWindow> &nativeWindow,int width,int height) {
@@ -155,9 +185,16 @@ static void render(
 		copyFrame(src, dest, w, h, src_step, dest_step);
 		#endif
 
-		// LOGD("%d %d %d %d", buffer.format, buffer.width, buffer.height, buffer.stride);
-		
-		memcpy(buffer.bits, data, width * height * 4);
+		LOGD("%d %d %d %d", buffer.format, buffer.width, buffer.height, buffer.stride);		
+		// memcpy(buffer.bits, data, width * height * 4);
+
+		// RGBA
+
+		if (width == buffer.width && height == buffer.height) {
+			memcpy(buffer.bits, data, width * height * 4);
+		} else {		
+			copyFrameCenterGravity(buffer.bits, data, buffer.width, buffer.height, width, height, 2);
+		}
 		
 		ANativeWindow_unlockAndPost(nativeWindow.get());
 	}	
@@ -290,42 +327,7 @@ void  Camera::Yvyu2Yuv420(char * yvyu, char *yuv420, int width, int height)
 		}  
     }  
 }
-
-#if 0
-int Camera::YUV2RGBA888(int y, int u, int v) {
-	int r, g, b;
-	
-	r = (int)((y&0xff) + 1.4075 * ((v&0xff)-128));
-	g = (int)((y&0xff) - 0.3455 * ((u&0xff)-128) - 0.7169*((v&0xff)-128));
-	b = (int)((y&0xff) + 1.779 * ((u&0xff)-128));
-	r =(r<0? 0: r>255? 255 : r);
-	g =(g<0? 0: g>255? 255 : g);
-	b =(b<0? 0: b>255? 255 : b);
-
-	return 0xFF000000 | (b << 16) | (g << 8) | (r << 0);
-}
-
-void Camera::frameYUYV2RGBA8888(int *out, char *data, int width, int height) {
-    int size = width * height * 2;
-    int u, v, y0, y1;
-    int count = 0;
-
-    for (int i = 0; i < size; ) {
-        y0 = data[i] & 0xff;
-        u = data[i + 1] & 0xff;
-        i += 2;
-
-        y1 = data[i] & 0xff;
-        v = data[i + 1] & 0xff;
-        i += 2;
-
-        out[count] = YUV2RGBA888(y0, u, v);
-        out[count + 1] = YUV2RGBA888(y1, u, v);
-        count += 2;
-    }
-}
-#endif
-
+ 
 void Camera::Yvyu2RGBA(int *rgbData, char *yvyu, int w, int h) {
 	int Y0 = 0;
 	int Y1 = 0;

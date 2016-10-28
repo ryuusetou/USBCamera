@@ -238,13 +238,13 @@ public class MainActivity extends AppCompatActivity {
         surfaceView = (SurfaceView)findViewById(R.id.play_view);
         SurfaceHolder surfaceHolder = surfaceView.getHolder();
 
-        // surfaceHolder.addCallback(new CameraPreview());
+//         surfaceHolder.addCallback(new CameraPreview());
 
         //////////////////////////////////////////////////
 
         MediaFormat format = MediaFormat.createVideoFormat(
                 MediaFormat.MIMETYPE_VIDEO_AVC,
-                1280, 720);
+                640, 480);
         format.setInteger(MediaFormat.KEY_FRAME_RATE,
                 10);
         format.setInteger(MediaFormat.KEY_BIT_RATE,
