@@ -46,41 +46,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public static void convertYUYV2RGB8888(int[] rgba,
-                                           byte[] data,
-                                           int width, int height) {
-        int size = width * height * 2;
-        int u, v, y0, y1;
-        int count = 0;
-
-        for (int i = 0; i < size; ) {
-            y0 = data[i] & 0xff;
-            v = data[i + 1] & 0xff;
-            i += 2;
-
-            y1 = data[i] & 0xff;
-            u = data[i + 1] & 0xff;
-            i += 2;
-
-            rgba[count] = convertYUVtoRGB(y0, u, v);
-            rgba[count + 1] = convertYUVtoRGB(y1, u, v);
-            count += 2;
-        }
-    }
-
-    private static int convertYUVtoRGB(int y, int u, int v) {
-        int r, g, b;
-
-        r = (int)((y&0xff) + 1.4075 * ((v&0xff)-128));
-        g = (int)((y&0xff) - 0.3455 * ((u&0xff)-128) - 0.7169*((v&0xff)-128));
-        b = (int)((y&0xff) + 1.779 * ((u&0xff)-128));
-        r =(r<0? 0: r>255? 255 : r);
-        g =(g<0? 0: g>255? 255 : g);
-        b =(b<0? 0: b>255? 255 : b);
-
-        return 0xff000000 | (b << 16) | (g << 8) | r;
-    }
-
     private class CameraEncoder implements CameraUser{
 
         public CameraEncoder() {
@@ -259,7 +224,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -275,7 +239,6 @@ public class MainActivity extends AppCompatActivity {
         SurfaceHolder surfaceHolder = surfaceView.getHolder();
 
         // surfaceHolder.addCallback(new CameraPreview());
-
 
         //////////////////////////////////////////////////
 

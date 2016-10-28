@@ -77,7 +77,7 @@ static void copyFrame
 
 static void render(
         const void *data, const sp<ANativeWindow> &nativeWindow,int width,int height) {
-#if 1
+#if 0
 		
     int err;
     sp<ANativeWindow> mNativeWindow = nativeWindow;	
@@ -155,9 +155,9 @@ static void render(
 		copyFrame(src, dest, w, h, src_step, dest_step);
 		#endif
 
-		LOGD("%d %d %d %d", buffer.format, buffer.width, buffer.height, buffer.stride);
+		// LOGD("%d %d %d %d", buffer.format, buffer.width, buffer.height, buffer.stride);
 		
-		memcpy(buffer.bits, data, width * height * 3 / 2);
+		memcpy(buffer.bits, data, width * height * 4);
 		
 		ANativeWindow_unlockAndPost(nativeWindow.get());
 	}	
@@ -205,9 +205,10 @@ public:
 
 	static void *setCamera(JNIEnv *env, jobject jcamera, Camera *camera);
 
-	static inline int YUV2RGBA888(int y, int u, int v);
+	// static inline int YUV2RGBA888(int y, int u, int v);
+	// static void frameYUYV2RGBA8888(int *out, char *buffer, int width, int height);
 
-	static void frameYUYV2RGBA8888(int *out, char *buffer, int width, int height);
+	static void Yvyu2RGBA(int *rgbData, char *yvyu, int w, int h);
 
 	static void  Yvyu2Yuv420(char * yvyu, char *yuv420, int width, int height);
 	
@@ -290,6 +291,7 @@ void  Camera::Yvyu2Yuv420(char * yvyu, char *yuv420, int width, int height)
     }  
 }
 
+#if 0
 int Camera::YUV2RGBA888(int y, int u, int v) {
 	int r, g, b;
 	
@@ -321,6 +323,75 @@ void Camera::frameYUYV2RGBA8888(int *out, char *data, int width, int height) {
         out[count + 1] = YUV2RGBA888(y1, u, v);
         count += 2;
     }
+}
+#endif
+
+void Camera::Yvyu2RGBA(int *rgbData, char *yvyu, int w, int h) {
+	int Y0 = 0;
+	int Y1 = 0;
+	int Cr = 0;
+	int Cb = 0;
+
+	int R = 0;
+	int G = 0;
+	int B = 0;	
+	
+	int pixPtr = 0;
+
+	int diff_r = 0;
+
+	int diff_g = 0;
+
+	int diff_b = 0;
+
+	char *ptr = yvyu;
+
+	for (int j = 0; j < h; j++) {
+		
+		// LOGD("j=%d", j);
+		
+		for (int i = 0; i < w / 2; i++) {
+			
+			Y0 = *ptr++;
+			Cb = *ptr++;
+ 			
+			Y1 = *ptr++;
+			Cr = *ptr++;		
+
+			if(Cb < 0) Cb += 127; else Cb -= 128;
+			if(Cr < 0) Cr += 127; else Cr -= 128;
+
+			diff_r = Cr + (Cr >> 2) + (Cr >> 3) + (Cr >> 5);
+			
+			diff_g = 0 - (Cb >> 2) + (Cb >> 4) + (Cb >> 5) - (Cr >> 1) + (Cr >> 3) + (Cr >> 4) + (Cr >> 5);
+			
+			diff_b = Cb + (Cb >> 1) + (Cb >> 2) + (Cb >> 6);			
+
+			R = Y0 + diff_r;//1.406*~1.403
+			if(R < 0) R = 0; else if(R > 255) R = 255;
+
+			G = Y0 + diff_g;//
+			if(G < 0) G = 0; else if(G > 255) G = 255;
+
+			B = Y0 + diff_b;//1.765~1.770
+			if(B < 0) B = 0; else if(B > 255) B = 255;
+
+			// rgbData[pixPtr++] = 0x000000ff + (B << 24) + (G << 16) + (R << 8);
+			rgbData[pixPtr++] = 0xff000000 + (B << 16) + (G << 8) + (R << 0);
+
+			R = Y1 + diff_r;//1.406*~1.403
+			if(R < 0) R = 0; else if(R > 255) R = 255;
+
+			G = Y1 + diff_g;//
+			if(G < 0) G = 0; else if(G > 255) G = 255;
+
+			B = Y1 + diff_b;//1.765~1.770
+			if(B < 0) B = 0; else if(B > 255) B = 255;
+
+			// rgbData[pixPtr++] = 0x000000ff + (B << 24) + (G << 16) + (R << 8);
+			rgbData[pixPtr++] = 0xff000000 + (B << 16) + (G << 8) + (R << 0);
+		}
+	}
 }
 
 Camera::Camera(const char *devPath) 
@@ -504,9 +575,7 @@ void Camera::setPreviewSurface(JNIEnv *env, jobject jsurface) {
 }
 
 void Camera::drawPreview() {
-	render(mYuv420, mPreviewSurface, mWidth, mHeight);
-
-	// render(mRGBX888, mPreviewSurface, mWidth, mHeight);	
+	render(mRGBX888, mPreviewSurface, mWidth, mHeight);
 }
 
 void Camera::peekFrame(JNIEnv *env,jobject jCamera) {
@@ -561,19 +630,22 @@ void Camera::peekFrame(JNIEnv *env,jobject jCamera) {
 
 		// YVYU -> YUV420(NV12)
 		if (mYuv420 == NULL) {
-			mYuv420 = new char[mWidth * mHeight * 3 / 2];
+			// mYuv420 = new char[mWidth * mHeight * 3 / 2];
 		}
 
 		if (mRGBX888 == NULL) {
-			// mRGBX888 = new char[mWidth * mHeight * 4];
+			mRGBX888 = new char[mWidth * mHeight * 4];
 		}
 
-		if (mYuv420 != NULL)
+		if (mYuv420 != NULL) {
 			Yvyu2Yuv420((char *)mBufferArray[mCurBufInfo.index].start, mYuv420, mWidth, mHeight);
-		
-		// LOGD("frameYUYV2RGBA8888");
-		if (mRGBX888 != NULL)
-			frameYUYV2RGBA8888((int *)mRGBX888, (char *)mBufferArray[mCurBufInfo.index].start, mWidth, mHeight);
+		}
+
+		if (mRGBX888 != NULL) {
+			// LOGD("before Yvyu2RGBA len=%d", mBufferArray[mCurBufInfo.index].length);
+			Yvyu2RGBA((int *)mRGBX888, (char *)mBufferArray[mCurBufInfo.index].start, mWidth, mHeight);
+			// LOGD("after Yvyu2RGBA");
+		}
 
 		pthread_mutex_lock(&mSurfaceLock);
 		if (mPreviewSurface.get() != NULL)
