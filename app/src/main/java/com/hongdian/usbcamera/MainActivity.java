@@ -1,8 +1,5 @@
 package com.hongdian.usbcamera;
 
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Paint;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
@@ -11,6 +8,7 @@ import android.os.Environment;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
@@ -23,16 +21,20 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static android.media.MediaCodec.CONFIGURE_FLAG_ENCODE;
+import static android.media.MediaCodec.createEncoderByType;
 
 public class MainActivity extends AppCompatActivity {
     private SurfaceView surfaceView;
 
     private Camera mCamera;
 
-    private class CameraPreview implements SurfaceHolder.Callback {
+    private class CameraPreview implements SurfaceHolder.Callback, Camera.CameraClient{
+        private Surface mSurface;
+
         @Override
         public void surfaceCreated(SurfaceHolder surfaceHolder) {
-            mCamera.startPreview(surfaceHolder.getSurface());
+            mSurface = surfaceHolder.getSurface();
+            mCamera.addClient(this);
         }
 
         @Override
@@ -42,70 +44,76 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void surfaceDestroyed(SurfaceHolder surfaceHolder) {
-            mCamera.stopPreview();
+            mCamera.removeClient(this);
+        }
+
+        @Override
+        public Surface getSurface() {
+            return mSurface;
+        }
+
+        @Override
+        public void onFirstCapture(long timeStampUS) {
+
+        }
+
+        @Override
+        public void onCaptureStop() {
+
+        }
+
+        @Override
+        public void onCameraError() {
+
+        }
+
+        @Override
+        public boolean isEncoder() {
+            return false;
         }
     }
 
-    private class CameraEncoder implements CameraUser{
+    private class CameraEncoder implements Camera.CameraClient {
+
+        private MediaCodec mEncoder;
 
         public CameraEncoder() {
-
-        }
-
-        @Override
-        public FrameContainer onGetFrameContainer() {
-            return null;
-        }
-
-        @Override
-        public void onNotifyFilled() {
-
-        }
-
-        @Override
-        public void onCameraClose() {
-
-        }
-    }
-
-    private class CameraRecorder implements CameraUser{
-
-        private  MediaCodecInfo selectCodec() {
-            int numCodecs = MediaCodecList.getCodecCount();
-            for (int i = 0; i < numCodecs; i++) {
-                MediaCodecInfo codecInfo = MediaCodecList.getCodecInfoAt(i);
-
-                if (!codecInfo.isEncoder()) {
-                    continue;
-                }
-
-                String[] types = codecInfo.getSupportedTypes();
-                for (int j = 0; j < types.length; j++) {
-                    Log.d("CameraRecorder", "support type:" + types[j]);
-                }
-            }
-            return null;
-        }
-
-        private MediaCodec encoder;
-
-        public CameraRecorder() {
-            container = new FrameContainer();
-            mLock = new ReentrantLock();
-
-            ByteBuffer mHotBuffer;
-
             MediaFormat format = MediaFormat.createVideoFormat(
                     MediaFormat.MIMETYPE_VIDEO_AVC,
-                    1280, 720);
+                    640, 480);
             format.setInteger(MediaFormat.KEY_FRAME_RATE,
                     10);
             format.setInteger(MediaFormat.KEY_BIT_RATE,
                     2 * 1000 * 1000);
             format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
-
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
-                    MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420SemiPlanar);
+                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+
+            try {
+                mEncoder = MediaCodec.createEncoderByType(
+                        format.getString(MediaFormat.KEY_MIME));
+
+                mEncoder.configure(format, null, null,
+                        CONFIGURE_FLAG_ENCODE);
+
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        public Surface getSurface() {
+            Surface surface = mEncoder.createInputSurface();
+            if (surface != null) {
+                Log.d("Camera", "encoder surface is ok");
+            }
+            return surface;
+        }
+
+        @Override
+        public void onFirstCapture(long timeStampUS) {
+            mEncoder.start();
 
             File targetFile = new File(Environment.getExternalStorageDirectory(), "1.h264");
             FileOutputStream fos = null;
@@ -114,164 +122,6 @@ public class MainActivity extends AppCompatActivity {
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
             }
-//            selectCodec();
-
-            encoder = null;
-            try {
-                encoder = MediaCodec.createEncoderByType(
-                        format.getString(MediaFormat.KEY_MIME));
-
-                encoder.configure(format, null, null,
-                        CONFIGURE_FLAG_ENCODE);
-
-                // mCamera.startPreview(encoder.createInputSurface());
-
-                encoder.start();
-
-                final FileOutputStream finalFos = fos;
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        MediaCodec.BufferInfo outInfo = new MediaCodec.BufferInfo();
-
-                        ByteBuffer [] outBuffers;
-
-                        ByteBuffer [] inBuffers;
-
-                        byte[] encodeData;
-
-                        for (;;) {
-
-                            int outputBufferId = encoder.dequeueOutputBuffer(outInfo, 20 * 1000);
-
-                            // Log.d("CODEC", "out id:" + outputBufferId);
-
-                            if (outputBufferId >= 0) {
-                                // outputBuffers[outputBufferId] is ready to be processed or rendered.
-
-                                Log.d("CODEC", "out size:" + outInfo.size +
-                                        " timeStamp:" + outInfo.presentationTimeUs);
-
-                                outBuffers = encoder.getOutputBuffers();
-
-                                encodeData = new byte[outInfo.size];
-
-                                outBuffers[outputBufferId].get(encodeData, 0, outInfo.size);
-                                try {
-                                    finalFos.write(encodeData, 0, outInfo.size);
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-
-                                encoder.releaseOutputBuffer(outputBufferId, false);
-                            } else if (outputBufferId == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
-                                // outputBuffers = encoder.getOutputBuffers();
-                            } else if (outputBufferId == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                                // Subsequent data will conform to new format.
-                                MediaFormat format = encoder.getOutputFormat();
-                            }
-                        }
-                    }
-                }).start();
-
-            } catch (IOException e) {
-                e.printStackTrace();
-
-            }
-        }
-
-        private FrameContainer container;
-
-        private Lock mLock;
-
-        @Override
-        public FrameContainer onGetFrameContainer() {
-            if (mLock.tryLock()) {
-                return container;
-            }
-
-            return null;
-        }
-
-        @Override
-        public void onNotifyFilled() {
-            ByteBuffer [] inBuffers = null;
-
-            ByteBuffer curInputBuffer;
-            int inputBufferId = encoder.dequeueInputBuffer(10 * 1000);
-            if (inputBufferId >= 0) {
-                // fill inputBuffers[inputBufferId] with valid data
-
-                Log.d("CODEC", "input len:" + container.len +
-                        " " + container.timeStamp * 1000);
-
-                inBuffers = encoder.getInputBuffers();
-                inBuffers[inputBufferId].clear();
-
-                //mLock.lock();
-                inBuffers[inputBufferId].put(container.target.array(), 0, container.len);
-                //mLock.unlock();
-
-                encoder.queueInputBuffer(inputBufferId, 0, container.len, 0, 0);
-            }
-
-            mLock.unlock();
-        }
-
-        @Override
-        public void onCameraClose() {
-
-        }
-    }
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-
-        mCamera = new Camera("/dev/video0", 1280, 720);
-
-        // mCamera.addUser(new CameraRecorder());
-
-        mCamera.startStream();
-
-        surfaceView = (SurfaceView)findViewById(R.id.play_view);
-        SurfaceHolder surfaceHolder = surfaceView.getHolder();
-
-//         surfaceHolder.addCallback(new CameraPreview());
-
-        //////////////////////////////////////////////////
-
-        MediaFormat format = MediaFormat.createVideoFormat(
-                MediaFormat.MIMETYPE_VIDEO_AVC,
-                640, 480);
-        format.setInteger(MediaFormat.KEY_FRAME_RATE,
-                10);
-        format.setInteger(MediaFormat.KEY_BIT_RATE,
-                2 * 1000 * 1000);
-        format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
-        format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
-                MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-
-        File targetFile = new File(Environment.getExternalStorageDirectory(), "1.h264");
-        FileOutputStream fos = null;
-        try {
-            fos = new FileOutputStream(targetFile);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-
-        final MediaCodec encoder;
-        try {
-            encoder = MediaCodec.createEncoderByType(
-                            format.getString(MediaFormat.KEY_MIME));
-
-            encoder.configure(format, null, null,
-                            CONFIGURE_FLAG_ENCODE);
-
-            mCamera.startPreview(encoder.createInputSurface());
-
-            encoder.start();
 
             final FileOutputStream finalFos = fos;
             new Thread(new Runnable() {
@@ -284,14 +134,14 @@ public class MainActivity extends AppCompatActivity {
                     byte[] encodeData;
 
                     for (;;) {
-                        int outputBufferId = encoder.dequeueOutputBuffer(outInfo, -1);
+                        int outputBufferId = mEncoder.dequeueOutputBuffer(outInfo, -1);
                         if (outputBufferId >= 0) {
                             // outputBuffers[outputBufferId] is ready to be processed or rendered.
 
                             Log.d("CODEC", "out size:" + outInfo.size +
                                     " timeStamp:" + outInfo.presentationTimeUs);
 
-                            outBuffers = encoder.getOutputBuffers();
+                            outBuffers = mEncoder.getOutputBuffers();
 
                             encodeData = new byte[outInfo.size];
 
@@ -302,20 +152,47 @@ public class MainActivity extends AppCompatActivity {
                                 e.printStackTrace();
                             }
 
-                            encoder.releaseOutputBuffer(outputBufferId, false);
+                            mEncoder.releaseOutputBuffer(outputBufferId, false);
                         } else if (outputBufferId == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
                             // outputBuffers = encoder.getOutputBuffers();
                         } else if (outputBufferId == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                             // Subsequent data will conform to new format.
-                            MediaFormat format = encoder.getOutputFormat();
+                            MediaFormat format = mEncoder.getOutputFormat();
                         }
                     }
                 }
             }).start();
-
-        } catch (IOException e) {
-            e.printStackTrace();
         }
 
+        @Override
+        public void onCaptureStop() {
+
+        }
+
+        @Override
+        public void onCameraError() {
+
+        }
+
+        @Override
+        public boolean isEncoder() {
+            return true;
+        }
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        mCamera = new Camera("/dev/video0", 1280, 720);
+
+        surfaceView = (SurfaceView)findViewById(R.id.play_view);
+        SurfaceHolder surfaceHolder = surfaceView.getHolder();
+
+        surfaceHolder.addCallback(new CameraPreview());
+
+        mCamera.addClient(new CameraEncoder());
+        mCamera.start();
     }
 }

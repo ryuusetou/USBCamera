@@ -1,8 +1,10 @@
 package com.hongdian.usbcamera;
 
+import android.util.Log;
 import android.view.Surface;
 
 import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -10,18 +12,25 @@ import java.util.concurrent.locks.ReentrantLock;
  * Created by ryuus on 2016/9/8 0008.
  */
 public class Camera {
+    protected static final String TAG = "Camera";
+
+    public interface CameraClient {
+        Surface getSurface();
+
+        void onFirstCapture(long timeStampUS);
+
+        void onCaptureStop();
+
+        void onCameraError();
+
+        boolean isEncoder();
+    }
 
     static {
         System.loadLibrary("usbcamera");
-
-        initNative();
     }
 
     private Lock mUserLock;
-
-    private LinkedList<CameraUser> mUser;
-
-    private int mNativeFD;
 
     private String mDevPath;
 
@@ -31,12 +40,12 @@ public class Camera {
 
     private int mNativeObject;
 
+    private List<CameraClient> mClients;
+
+    private Lock mClientLock;
+
     public Camera(String camera, int width, int height){
         mUserLock = new ReentrantLock();
-
-        mUser = new LinkedList<>();
-
-        mNativeFD = -1;
 
         mNativeObject = 0;
 
@@ -45,89 +54,104 @@ public class Camera {
         mWidth = width;
 
         mHeight = height;
+
+        mClientLock = new ReentrantLock();
+
+        mClients = new LinkedList<>();
+
+        attachNative(mWidth, mHeight);
     }
 
-    public void addUser(CameraUser user) {
-        mUserLock.lock();
-        mUser.add(user);
-        mUserLock.unlock();
-    }
-
-    public void deleteUser(CameraUser user){
-        mUserLock.lock();
-        mUser.remove(user);
-        if (mUser.size() == 0)
-            closeCamera();
-        mUserLock.unlock();
-    }
-
-    public void startStream(){
-        mNativeFD = openCamera(mWidth, mHeight);
-
-        if (mNativeFD > 0) {
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    peekFrame();
-                }
-            }).start();
+    public int start(){
+        int rc = -1;
+        if ( (rc = openCamera()) != 0) {
+            Log.d(TAG, "start: openCamera rc:" + rc);
+            return rc;
         }
-    }
 
-    public void startPreview(Surface surface) {
-        if (mNativeFD > 0) {
-            nativeStartPreview(surface);
-        }
-    }
-
-    public void stopPreview() {
-        if (mNativeFD > 0) {
-            nativeStopPreview();
-        }
-    }
-
-    public void stopStream(){
-        if (mNativeFD > 0) {
-            closeCamera();
-            mNativeFD = -1;
-        }
-    }
-
-    private void onNewFrame() {
-        FrameContainer container;
-
-        mUserLock.lock();
-        for (CameraUser user : mUser) {
-            container = user.onGetFrameContainer();
-            if (container != null) {
-                fillFrame(container);
-                user.onNotifyFilled();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                startCapture();
             }
-        }
-        mUserLock.unlock();
+        }).start();
+
+        return 0;
     }
 
-    private void onCameraClose() {
-        mNativeFD = -1;
-
-        mUserLock.lock();
-        for (CameraUser user : mUser) {
-            user.onCameraClose();
-        }
-        mUserLock.unlock();
+    public void stop(){
+        stopCapture();
     }
 
-    private static native void initNative();
+    public void release() {
+        mClientLock.lock();
+        for (CameraClient c : mClients) {
+            mClients.remove(c);
+        }
+        mClientLock.unlock();
 
-    private native int openCamera(int width, int height);
+        releaseCamera();
+    }
 
-    private native void nativeStartPreview(Surface view);
+    public void addClient(CameraClient client) {
+        mClientLock.lock();
+        mClients.add(client);
+        if (client.isEncoder()) {
+            addEncoder(client.getSurface());
+        } else {
+            setPreview(client.getSurface());
+        }
+        mClientLock.unlock();
+    }
 
-    private native void nativeStopPreview();
+    public void removeClient(CameraClient client) {
+        mClientLock.lock();
+        mClients.remove(client);
+        if (client.isEncoder()) {
+            removeEncoder(client.getSurface());
+        } else {
+            setPreview(null);
+        }
+        mClientLock.unlock();
+    }
 
-    private native int peekFrame();
+    private void notifyFirstCapture(long timestampUS) {
+        mClientLock.lock();
+        for (CameraClient c : mClients) {
+            c.onFirstCapture(timestampUS);
+        }
+        mClientLock.unlock();
+    }
 
-    private native void fillFrame(FrameContainer container);
+    private void notifyCaptureStop() {
+        mClientLock.lock();
+        for (CameraClient c : mClients) {
+            c.onCaptureStop();
+        }
+        mClientLock.unlock();
+    }
 
-    private native void closeCamera();
+    private void notifyCameraError() {
+        mClientLock.lock();
+        for (CameraClient c : mClients) {
+            c.onCameraError();
+        }
+        mClientLock.unlock();
+    }
+
+    private native void attachNative(int width, int height);
+
+    private native int openCamera();
+
+    private native void startCapture();
+
+    private native void stopCapture();
+
+    private native void releaseCamera();
+
+    private native void setPreview(Surface surface);
+
+    private native void addEncoder(Surface surface);
+
+    private native void removeEncoder(Surface surface);
 }
